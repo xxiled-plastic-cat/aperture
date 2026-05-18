@@ -113,6 +113,29 @@ export type AlphaDbSnapshot = {
 	error?: string;
 };
 
+export type PolymarketDbLiveMarket = {
+	conditionId: string;
+	marketId: string | null;
+	marketSlug: string | null;
+	title: string | null;
+	lastSeenAt: string | null;
+};
+
+export type PolymarketMarketStatusSummary = {
+	liveMarkets: number;
+	resolvedMarkets: number;
+	closedMarkets: number;
+	totalKnownMarkets: number;
+	lastSeenAt: string | null;
+};
+
+export type PolymarketDbSnapshot = {
+	marketStatus: PolymarketMarketStatusSummary | null;
+	liveMarkets: PolymarketDbLiveMarket[];
+	ok: boolean;
+	error?: string;
+};
+
 export type DashboardApiResponse = DashboardViewModel & {
 	meta: {
 		apiOk: boolean;
@@ -157,6 +180,9 @@ export type MarketsApiResponse = {
 		alphaDbOk: boolean;
 		alphaDbError?: string;
 		alphaDbLiveMarkets: number;
+		polyDbOk: boolean;
+		polyDbError?: string;
+		polyDbLiveMarkets: number;
 		polyApiOk: boolean;
 		polyApiError?: string;
 		kalshiApiOk: boolean;

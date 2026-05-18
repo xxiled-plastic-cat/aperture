@@ -3,8 +3,10 @@ const DEFAULT_TIMEOUT_MS = 7000;
 const DEFAULT_MAX_MARKETS = 200;
 const DEFAULT_ORDERBOOK_ENRICHMENT_LIMIT = 40;
 const DEFAULT_ORDERBOOK_DEPTH = 10;
+const DEFAULT_MVE_FILTER_MODE = 'exclude';
 const ORDERBOOK_WORKER_COUNT = 6;
 const PAGE_SIZE = 100;
+type KalshiMveFilterMode = 'exclude' | 'only' | 'all';
 
 export type KalshiMarket = {
 	id: string;
@@ -97,6 +99,13 @@ const getMarketStatus = (): string => {
 	return raw;
 };
 
+const getMveFilterMode = (): KalshiMveFilterMode => {
+	const raw = (process.env.KALSHI_MVE_FILTER ?? DEFAULT_MVE_FILTER_MODE).trim().toLowerCase();
+	if (raw === 'only') return 'only';
+	if (raw === 'all' || raw === 'none') return 'all';
+	return 'exclude';
+};
+
 const fetchJson = async (url: string, timeoutMs: number): Promise<unknown> => {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -180,6 +189,26 @@ const resolveQuotedLiquidity = (record: Record<string, unknown>): number | null 
 	return notionals.reduce<number>((sum, value) => sum + (value ?? 0), 0) || null;
 };
 
+const isMveMarket = (record: Record<string, unknown>): boolean => {
+	const ticker = toStringValue(record.ticker);
+	const eventTicker = toStringValue(record.event_ticker);
+	const mveCollection = toStringValue(record.mve_collection_ticker);
+	const mveSelectedLegs = record.mve_selected_legs;
+	return (
+		(mveCollection !== null && mveCollection.length > 0) ||
+		(Array.isArray(mveSelectedLegs) && mveSelectedLegs.length > 0) ||
+		(ticker !== null && ticker.startsWith('KXMV')) ||
+		(eventTicker !== null && eventTicker.startsWith('KXMV'))
+	);
+};
+
+const shouldIncludeMarket = (record: Record<string, unknown>, mveFilterMode: KalshiMveFilterMode): boolean => {
+	const mveMarket = isMveMarket(record);
+	if (mveFilterMode === 'only') return mveMarket;
+	if (mveFilterMode === 'all') return true;
+	return !mveMarket;
+};
+
 const toKalshiMarket = (raw: unknown): KalshiMarket | null => {
 	if (!raw || typeof raw !== 'object') return null;
 	const record = raw as Record<string, unknown>;
@@ -235,7 +264,8 @@ const loadMarkets = async (
 	baseUrl: string,
 	timeoutMs: number,
 	maxMarkets: number,
-	status: string
+	status: string,
+	mveFilterMode: KalshiMveFilterMode
 ): Promise<KalshiMarket[]> => {
 	const all: KalshiMarket[] = [];
 	let cursor: string | null = null;
@@ -243,11 +273,15 @@ const loadMarkets = async (
 
 	for (let page = 0; page < pages; page += 1) {
 		const queryParts = [`limit=${PAGE_SIZE}`, `status=${encodeURIComponent(status)}`];
+		if (mveFilterMode !== 'all') queryParts.push(`mve_filter=${encodeURIComponent(mveFilterMode)}`);
 		if (cursor) queryParts.push(`cursor=${encodeURIComponent(cursor)}`);
 		const url = `${baseUrl}/markets?${queryParts.join('&')}`;
 		const payload = await fetchJson(url, timeoutMs);
 		const rawMarkets = extractMarketsArray(payload);
 		for (const raw of rawMarkets) {
+			if (!raw || typeof raw !== 'object') continue;
+			const record = raw as Record<string, unknown>;
+			if (!shouldIncludeMarket(record, mveFilterMode)) continue;
 			const mapped = toKalshiMarket(raw);
 			if (mapped) all.push(mapped);
 			if (all.length >= maxMarkets) break;
@@ -353,11 +387,12 @@ export const loadKalshiApiSnapshot = async (): Promise<KalshiApiSnapshot> => {
 	const timeoutMs = getTimeoutMs();
 	const maxMarkets = getMaxMarkets();
 	const status = getMarketStatus();
+	const mveFilterMode = getMveFilterMode();
 	const orderbookEnrichmentLimit = getOrderbookEnrichmentLimit();
 	const orderbookDepth = getOrderbookDepth();
 
 	try {
-		const rawMarkets = await loadMarkets(baseUrl, timeoutMs, maxMarkets, status);
+		const rawMarkets = await loadMarkets(baseUrl, timeoutMs, maxMarkets, status, mveFilterMode);
 		const markets = await enrichMarketsWithOrderbooks(
 			rawMarkets,
 			baseUrl,

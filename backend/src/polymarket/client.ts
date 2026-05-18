@@ -1,3 +1,5 @@
+import type { PolymarketDbLiveMarket } from '../types';
+
 const DEFAULT_GAMMA_BASE_URL = 'https://gamma-api.polymarket.com';
 const DEFAULT_CLOB_BASE_URL = 'https://clob.polymarket.com';
 const DEFAULT_TIMEOUT_MS = 7000;
@@ -199,6 +201,8 @@ const toPolymarketMarket = (raw: unknown, rewardsIndex: RewardIndex): Polymarket
 	const isClosed = toBooleanValue(record.closed);
 	const active = toBooleanValue(record.active);
 	const resolved = toBooleanValue(record.resolved);
+	const isResolved = resolved === true || isClosed === true;
+	const isLive = isResolved ? false : active !== null ? active : isClosed !== null ? !isClosed : null;
 
 	return {
 		id,
@@ -210,8 +214,27 @@ const toPolymarketMarket = (raw: unknown, rewardsIndex: RewardIndex): Polymarket
 		liquidityUsd,
 		volumeUsd,
 		dailyRewardsUsd,
-		isLive: active !== null ? active : isClosed !== null ? !isClosed : null,
-		isResolved: resolved
+		isLive,
+		isResolved
+	};
+};
+
+const mapDbLiveMarket = (market: PolymarketDbLiveMarket): PolymarketMarket => {
+	const title = market.title ?? market.marketSlug ?? market.marketId ?? market.conditionId;
+	const slug = market.marketSlug ?? market.marketId ?? market.conditionId;
+	const id = market.marketId ?? market.conditionId;
+	return {
+		id,
+		conditionId: market.conditionId,
+		slug,
+		title,
+		yesPrice: null,
+		noPrice: null,
+		liquidityUsd: null,
+		volumeUsd: null,
+		dailyRewardsUsd: null,
+		isLive: true,
+		isResolved: false
 	};
 };
 
@@ -248,22 +271,38 @@ const loadRewardMarkets = async (clobBaseUrl: string, timeoutMs: number): Promis
 	return rewardMarkets;
 };
 
-export const loadPolymarketApiSnapshot = async (): Promise<PolymarketApiSnapshot> => {
+export const loadPolymarketApiSnapshot = async (
+	dbLiveMarkets: PolymarketDbLiveMarket[] = []
+): Promise<PolymarketApiSnapshot> => {
 	const gammaBaseUrl = withTrailingTrim(process.env.POLY_GAMMA_BASE_URL ?? DEFAULT_GAMMA_BASE_URL);
 	const clobBaseUrl = withTrailingTrim(process.env.POLY_CLOB_BASE_URL ?? DEFAULT_CLOB_BASE_URL);
 	const timeoutMs = getTimeoutMs();
 	const maxMarkets = getMaxMarkets();
 
 	try {
+		const liveMarkets = dbLiveMarkets.map(mapDbLiveMarket);
+		const dbLiveConditionIds = new Set(liveMarkets.map((market) => market.conditionId));
 		const [rawMarkets, rewardMarkets] = await Promise.all([
 			loadGammaMarkets(gammaBaseUrl, timeoutMs, maxMarkets),
 			loadRewardMarkets(clobBaseUrl, timeoutMs).catch(() => [])
 		]);
 		const rewardsIndex = buildRewardsIndex(rewardMarkets);
 		const deduped = new Map<string, PolymarketMarket>();
+		for (const market of liveMarkets) deduped.set(market.conditionId, market);
 		for (const raw of rawMarkets) {
 			const mapped = toPolymarketMarket(raw, rewardsIndex);
 			if (!mapped) continue;
+			// When DB rows exist, DB lifecycle is canonical: only enrich known live condition IDs.
+			if (dbLiveConditionIds.size > 0 && !dbLiveConditionIds.has(mapped.conditionId)) continue;
+			const existing = deduped.get(mapped.conditionId);
+			if (existing) {
+				deduped.set(mapped.conditionId, {
+					...mapped,
+					isLive: existing.isLive,
+					isResolved: existing.isResolved
+				});
+				continue;
+			}
 			deduped.set(mapped.conditionId, mapped);
 		}
 		const markets = [...deduped.values()];
@@ -275,9 +314,9 @@ export const loadPolymarketApiSnapshot = async (): Promise<PolymarketApiSnapshot
 		};
 	} catch (error) {
 		return {
-			markets: [],
+			markets: dbLiveMarkets.map(mapDbLiveMarket),
 			fetchedAtIso: new Date().toISOString(),
-			ok: false,
+			ok: dbLiveMarkets.length > 0,
 			error: error instanceof Error ? error.message : 'Unknown Polymarket API error'
 		};
 	}

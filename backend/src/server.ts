@@ -3,6 +3,11 @@ import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
 
+import { loadAlphaApiSnapshot } from './alpha/client';
+import { loadAlphaDbSnapshot } from './alpha/db';
+import { loadKalshiApiSnapshot } from './kalshi/client';
+import { loadPolymarketApiSnapshot } from './polymarket/client';
+import { loadPolymarketDbSnapshot } from './polymarket/db';
 import { buildDashboardResponse } from './services/dashboard';
 import { buildMarketsResponse } from './services/markets';
 
@@ -43,6 +48,62 @@ app.get('/api/markets', async (_req, res) => {
 		res.status(500).json({
 			ok: false,
 			error: error instanceof Error ? error.message : 'Unknown markets error'
+		});
+	}
+});
+
+app.get('/api/markets/status/alpha', async (_req, res) => {
+	try {
+		const dbSnapshot = await loadAlphaDbSnapshot();
+		const snapshot = await loadAlphaApiSnapshot(dbSnapshot.liveMarkets);
+		res.json({
+			venue: 'Alpha',
+			ok: snapshot.ok,
+			marketsIndexed: snapshot.markets.length,
+			error: snapshot.error
+		});
+	} catch (error) {
+		res.status(500).json({
+			venue: 'Alpha',
+			ok: false,
+			error: error instanceof Error ? error.message : 'Unknown Alpha status error'
+		});
+	}
+});
+
+app.get('/api/markets/status/polymarket', async (_req, res) => {
+	try {
+		const dbSnapshot = await loadPolymarketDbSnapshot();
+		const snapshot = await loadPolymarketApiSnapshot(dbSnapshot.liveMarkets);
+		res.json({
+			venue: 'Polymarket',
+			ok: snapshot.ok,
+			marketsIndexed: snapshot.markets.length,
+			error: snapshot.error
+		});
+	} catch (error) {
+		res.status(500).json({
+			venue: 'Polymarket',
+			ok: false,
+			error: error instanceof Error ? error.message : 'Unknown Polymarket status error'
+		});
+	}
+});
+
+app.get('/api/markets/status/kalshi', async (_req, res) => {
+	try {
+		const snapshot = await loadKalshiApiSnapshot();
+		res.json({
+			venue: 'Kalshi',
+			ok: snapshot.ok,
+			marketsIndexed: snapshot.markets.length,
+			error: snapshot.error
+		});
+	} catch (error) {
+		res.status(500).json({
+			venue: 'Kalshi',
+			ok: false,
+			error: error instanceof Error ? error.message : 'Unknown Kalshi status error'
 		});
 	}
 });

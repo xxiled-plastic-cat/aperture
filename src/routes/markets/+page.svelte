@@ -5,7 +5,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import { dashboardTimestamp, mockMarkets, navItems } from '$lib/mock/markets';
-	import type { MarketRow, MarketSignal, MarketsApiResponse } from '$lib/types/markets';
+	import type { MarketRow, MarketSignal, MarketsApiResponse, Venue } from '$lib/types/markets';
 
 	type ChipFilter =
 		| 'All'
@@ -14,6 +14,37 @@
 		| 'Parity Gaps'
 		| 'High Liquidity'
 		| 'Expiring Soon';
+	type VenueFilter = 'All' | Venue;
+	type VenueLoadState = 'loading' | 'ready' | 'error';
+	type SortColumn =
+		| 'name'
+		| 'venue'
+		| 'category'
+		| 'yesPrice'
+		| 'noPrice'
+		| 'spread'
+		| 'volume'
+		| 'liquidity'
+		| 'reward'
+		| 'expiry'
+		| 'signals'
+		| 'updated';
+	type SortDirection = 'asc' | 'desc';
+
+	const sortableColumns: { key: SortColumn; label: string; align: 'left' | 'right' | 'center' }[] = [
+		{ key: 'name', label: 'Market', align: 'left' },
+		{ key: 'venue', label: 'Venue', align: 'left' },
+		{ key: 'category', label: 'Category', align: 'left' },
+		{ key: 'yesPrice', label: 'YES', align: 'right' },
+		{ key: 'noPrice', label: 'NO', align: 'right' },
+		{ key: 'spread', label: 'Spread', align: 'right' },
+		{ key: 'volume', label: 'Volume', align: 'right' },
+		{ key: 'liquidity', label: 'Liquidity', align: 'right' },
+		{ key: 'reward', label: 'Reward', align: 'center' },
+		{ key: 'expiry', label: 'Expiry', align: 'left' },
+		{ key: 'signals', label: 'Signals', align: 'left' },
+		{ key: 'updated', label: 'Updated', align: 'left' }
+	];
 
 	const quickFilters: ChipFilter[] = [
 		'All',
@@ -23,6 +54,7 @@
 		'High Liquidity',
 		'Expiring Soon'
 	];
+	const venueOrder: Venue[] = ['Alpha', 'Polymarket', 'Kalshi'];
 
 	const signalTone: Record<MarketSignal, string> = {
 		SPREAD: 'border-terminalGreen/45 bg-terminalGreen/10 text-terminalGreen',
@@ -46,9 +78,23 @@
 
 	const defaultMarket = fallbackData.markets[0]!;
 
-	let query = '';
 	let activeChip: ChipFilter = 'All';
+	let activeVenue: VenueFilter = 'All';
 	let selectedMarketId = defaultMarket.id;
+	let sortColumn: SortColumn | null = null;
+	let sortDirection: SortDirection = 'desc';
+	let displayMarkets: MarketRow[] = fallbackData.markets;
+	let isMarketsLoading = true;
+	let venueLoadState: Record<Venue, VenueLoadState> = {
+		Alpha: 'loading',
+		Polymarket: 'loading',
+		Kalshi: 'loading'
+	};
+	let venueBadgeStateMap: Record<Venue, VenueLoadState | 'ready'> = {
+		Alpha: 'loading',
+		Polymarket: 'loading',
+		Kalshi: 'loading'
+	};
 
 	const formatCurrency = (value: number) =>
 		new Intl.NumberFormat('en-US', {
@@ -62,6 +108,63 @@
 
 	const expiryDays = (expiry: string) => Number.parseInt(expiry.replace(/\D/g, ''), 10) || 999;
 
+	const sortValue = (market: MarketRow, column: SortColumn): string | number => {
+		switch (column) {
+			case 'name':
+				return market.name.toLowerCase();
+			case 'venue':
+				return market.venue;
+			case 'category':
+				return market.category;
+			case 'yesPrice':
+				return market.yesPrice;
+			case 'noPrice':
+				return market.noPrice;
+			case 'spread':
+				return market.spread;
+			case 'volume':
+				return market.volume;
+			case 'liquidity':
+				return market.liquidity;
+			case 'reward':
+				return market.reward ? 1 : 0;
+			case 'expiry':
+				return expiryDays(market.expiry);
+			case 'signals':
+				return market.signals.join(',');
+			case 'updated':
+				return market.updated.toLowerCase();
+		}
+	};
+
+	const compareMarkets = (
+		a: MarketRow,
+		b: MarketRow,
+		column: SortColumn,
+		direction: SortDirection
+	): number => {
+		const left = sortValue(a, column);
+		const right = sortValue(b, column);
+		let result = 0;
+		if (typeof left === 'number' && typeof right === 'number') {
+			result = left - right;
+		} else {
+			result = String(left).localeCompare(String(right));
+		}
+		return direction === 'asc' ? result : -result;
+	};
+
+	const sortIndicator = (column: SortColumn) => {
+		if (sortColumn !== column) return '';
+		return sortDirection === 'desc' ? ' ↓' : ' ↑';
+	};
+
+	const headerAlignClass = (align: 'left' | 'right' | 'center') => {
+		if (align === 'right') return 'justify-end text-right';
+		if (align === 'center') return 'justify-center text-center';
+		return 'justify-start text-left';
+	};
+
 	const chipMatch = (market: MarketRow, chip: ChipFilter) => {
 		if (chip === 'All') return true;
 		if (chip === 'Rewards') return market.reward;
@@ -71,19 +174,71 @@
 		return expiryDays(market.expiry) <= 14;
 	};
 
-	$: filteredMarkets = data.markets.filter((market) => {
-		const normalized = query.trim().toLowerCase();
-		const textMatch =
-			!normalized ||
-			market.name.toLowerCase().includes(normalized) ||
-			market.category.toLowerCase().includes(normalized) ||
-			market.signals.join(' ').toLowerCase().includes(normalized);
+	const setVenueLoadState = (venue: Venue, state: VenueLoadState) => {
+		venueLoadState = { ...venueLoadState, [venue]: state };
+	};
 
-		return textMatch && chipMatch(market, activeChip);
+	const loadVenueStatus = async (baseUrl: string, venue: Venue, slug: 'alpha' | 'polymarket' | 'kalshi') => {
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), 12000);
+		try {
+			const response = await fetch(`${baseUrl}/api/markets/status/${slug}`, { signal: controller.signal });
+			if (!response.ok) {
+				setVenueLoadState(venue, 'error');
+				return;
+			}
+			const payload = (await response.json()) as { ok?: boolean };
+			setVenueLoadState(venue, payload.ok === false ? 'error' : 'ready');
+		} catch {
+			setVenueLoadState(venue, 'error');
+		} finally {
+			clearTimeout(timeout);
+		}
+	};
+
+	$: venueFilters = venueOrder.filter(
+		(venue) => data.venues.includes(venue) || data.markets.some((market) => market.venue === venue)
+	);
+
+	$: venueBadgeStateMap = {
+		Alpha:
+			data.venues.includes('Alpha') || data.markets.some((market) => market.venue === 'Alpha')
+				? 'ready'
+				: venueLoadState.Alpha,
+		Polymarket:
+			data.venues.includes('Polymarket') || data.markets.some((market) => market.venue === 'Polymarket')
+				? 'ready'
+				: venueLoadState.Polymarket,
+		Kalshi:
+			data.venues.includes('Kalshi') || data.markets.some((market) => market.venue === 'Kalshi')
+				? 'ready'
+				: venueLoadState.Kalshi
+	};
+
+	$: {
+		for (const venue of venueOrder) {
+			const hasVenueMarkets = data.markets.some((market) => market.venue === venue);
+			if (hasVenueMarkets && venueLoadState[venue] === 'loading') {
+				setVenueLoadState(venue, 'ready');
+			}
+		}
+	}
+
+	$: filteredMarkets = data.markets.filter((market) => {
+		const venueMatch = activeVenue === 'All' || market.venue === activeVenue;
+
+		return venueMatch && chipMatch(market, activeChip);
 	});
 
+	$: {
+		const activeSort = sortColumn;
+		displayMarkets = activeSort
+			? [...filteredMarkets].sort((a, b) => compareMarkets(a, b, activeSort, sortDirection))
+			: filteredMarkets;
+	}
+
 	$: selectedMarket =
-		filteredMarkets.find((market) => market.id === selectedMarketId) ?? filteredMarkets[0] ?? defaultMarket;
+		displayMarkets.find((market) => market.id === selectedMarketId) ?? displayMarkets[0] ?? defaultMarket;
 
 	$: driftStart = Math.max(0.05, selectedMarket.yesPrice - 0.09).toFixed(2);
 	$: driftOneHour = `+${Math.max(0.4, selectedMarket.spread * 0.5).toFixed(1)}%`;
@@ -97,12 +252,36 @@
 		activeChip = chip;
 	};
 
+	const selectVenue = (venue: VenueFilter) => {
+		activeVenue = venue;
+	};
+
+	const toggleSort = (column: SortColumn) => {
+		if (sortColumn === column) {
+			sortDirection = sortDirection === 'desc' ? 'asc' : 'desc';
+			return;
+		}
+		sortColumn = column;
+		sortDirection = 'desc';
+	};
+
 	onMount(async () => {
+		isMarketsLoading = true;
+		venueLoadState = { Alpha: 'loading', Polymarket: 'loading', Kalshi: 'loading' };
 		const baseUrl = (
 			(import.meta.env.PUBLIC_API_BASE_URL as string | undefined) ??
 			(import.meta.env.VITE_PUBLIC_API_BASE_URL as string | undefined)
 		)?.trim();
-		if (!baseUrl) return;
+		if (!baseUrl) {
+			isMarketsLoading = false;
+			venueLoadState = { Alpha: 'error', Polymarket: 'error', Kalshi: 'error' };
+			return;
+		}
+
+		void loadVenueStatus(baseUrl, 'Alpha', 'alpha');
+		void loadVenueStatus(baseUrl, 'Polymarket', 'polymarket');
+		void loadVenueStatus(baseUrl, 'Kalshi', 'kalshi');
+
 		try {
 			const response = await fetch(`${baseUrl}/api/markets`);
 			if (!response.ok) return;
@@ -112,9 +291,17 @@
 					...payload,
 					marketsIndexed: payload.marketsIndexed || payload.markets.length
 				};
+				for (const venue of venueOrder) {
+					const hasVenue =
+						(payload.venues?.includes(venue) ?? false) || payload.markets.some((market) => market.venue === venue);
+					if (hasVenue) setVenueLoadState(venue, 'ready');
+				}
 			}
 		} catch {
 			// Keep static fallback when backend is unavailable.
+			venueLoadState = { Alpha: 'error', Polymarket: 'error', Kalshi: 'error' };
+		} finally {
+			isMarketsLoading = false;
 		}
 	});
 </script>
@@ -145,34 +332,63 @@
 							{#if data.venues.length === 0}
 								<span class="rounded-sm border border-border bg-panelAlt px-2 py-0.5 text-textMuted">NO LIVE VENUES</span>
 							{:else}
-								{#each data.venues as venue}
+								{#each venueOrder as venue}
 									<span
 										class={`rounded-sm border px-2 py-0.5 ${
-											venue === 'Polymarket'
-												? 'border-signalCyan/45 bg-signalCyan/10 text-signalCyan'
-												: 'border-terminalGreen/40 bg-terminalGreen/10 text-terminalGreen'
+											venueBadgeStateMap[venue] === 'loading'
+												? 'border-border bg-panelAlt text-textMuted animate-pulse'
+												: venueBadgeStateMap[venue] === 'error'
+													? 'border-danger/45 bg-danger/10 text-danger'
+													: venue === 'Polymarket'
+														? 'border-signalCyan/45 bg-signalCyan/10 text-signalCyan'
+														: 'border-terminalGreen/40 bg-terminalGreen/10 text-terminalGreen'
 										}`}
 									>
 										{venue}
 									</span>
 								{/each}
 							{/if}
-							<span class="rounded-sm border border-mutedGold/35 bg-mutedGold/10 px-2 py-0.5 text-mutedGold">{data.feedMode}</span>
+							<span
+								class={`rounded-sm border px-2 py-0.5 ${
+									isMarketsLoading
+										? 'animate-pulse border-border bg-panelAlt text-textMuted'
+										: 'border-mutedGold/35 bg-mutedGold/10 text-mutedGold'
+								}`}
+							>
+								{isMarketsLoading ? 'LOADING' : data.feedMode}
+							</span>
 							<span class="rounded-sm border border-border bg-panelAlt px-2 py-0.5 text-textMuted">READ ONLY</span>
 						</div>
 					</div>
 				</section>
 
 				<section class="space-y-2 border border-border bg-panel p-2.5">
-					<div class="flex items-center rounded-sm border border-border bg-panelAlt px-2.5 py-1.5">
-						<span class="mr-2 shrink-0 font-mono text-[11px] text-textMuted">QUERY:</span>
-						<input
-							class="min-w-0 flex-1 bg-transparent font-mono text-xs text-textPrimary outline-none placeholder:text-textMuted"
-							bind:value={query}
-							placeholder="filter markets: venue:polymarket spread:>3 reward:true"
-							spellcheck="false"
-							autocomplete="off"
-						/>
+					<div class="flex flex-wrap gap-1.5">
+						<span class="self-center font-mono text-[10px] uppercase tracking-wide text-textMuted">VENUE:</span>
+						<button
+							type="button"
+							class={`rounded-sm border px-2 py-1 font-mono text-[10px] uppercase tracking-wide transition-colors ${
+								activeVenue === 'All'
+									? 'border-terminalGreen/60 bg-terminalGreen/10 text-terminalGreen'
+									: 'border-border bg-panelAlt text-textSecondary hover:text-textPrimary'
+							}`}
+							on:click={() => selectVenue('All')}
+						>
+							All
+						</button>
+						{#each venueFilters as venue}
+							<button
+								type="button"
+								class={`rounded-sm border px-2 py-1 font-mono text-[10px] uppercase tracking-wide transition-colors ${
+									venue === activeVenue
+										? 'border-terminalGreen/60 bg-terminalGreen/10 text-terminalGreen'
+										: 'border-border bg-panelAlt text-textSecondary hover:text-textPrimary'
+								}`}
+								on:click={() => selectVenue(venue)}
+							>
+								{venue}
+							</button>
+						{/each}
 					</div>
 					<div class="flex flex-wrap gap-1.5">
 						{#each quickFilters as chip}
@@ -197,29 +413,34 @@
 							<table class="w-full border-collapse font-mono text-[11px]">
 								<thead class="sticky top-0 z-10 bg-panelAlt text-[10px] uppercase tracking-wide text-textMuted">
 									<tr class="border-b border-border">
-										<th class="px-2 py-2 text-left font-normal">Market</th>
-										<th class="px-2 py-2 text-left font-normal">Venue</th>
-										<th class="px-2 py-2 text-left font-normal">Category</th>
-										<th class="px-2 py-2 text-right font-normal">YES</th>
-										<th class="px-2 py-2 text-right font-normal">NO</th>
-										<th class="px-2 py-2 text-right font-normal">Spread</th>
-										<th class="px-2 py-2 text-right font-normal">Volume</th>
-										<th class="px-2 py-2 text-right font-normal">Liquidity</th>
-										<th class="px-2 py-2 text-center font-normal">Reward</th>
-										<th class="px-2 py-2 text-left font-normal">Expiry</th>
-										<th class="px-2 py-2 text-left font-normal">Signals</th>
-										<th class="px-2 py-2 text-left font-normal">Updated</th>
+										{#each sortableColumns as column}
+											<th
+												class={`px-2 py-2 font-normal ${column.align === 'right' ? 'text-right' : column.align === 'center' ? 'text-center' : 'text-left'}`}
+												aria-sort={sortColumn === column.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+											>
+												<button
+													type="button"
+													class={`flex w-full items-center gap-1 font-normal transition-colors hover:text-textPrimary ${headerAlignClass(column.align)} ${
+														sortColumn === column.key ? 'text-terminalGreen' : ''
+													}`}
+													on:click|stopPropagation={() => toggleSort(column.key)}
+												>
+													<span>{column.label}</span>
+													<span class="tabular-nums text-[9px]">{sortIndicator(column.key)}</span>
+												</button>
+											</th>
+										{/each}
 									</tr>
 								</thead>
 								<tbody>
-									{#if filteredMarkets.length === 0}
+									{#if displayMarkets.length === 0}
 										<tr>
 											<td colspan="12" class="px-3 py-6 text-center font-mono text-xs text-textMuted">
 												NO MARKETS MATCH CURRENT FILTER
 											</td>
 										</tr>
 									{:else}
-										{#each filteredMarkets as market (market.id)}
+										{#each displayMarkets as market (market.id)}
 											<tr
 												class={`border-b border-border/80 transition-colors ${
 													market.id === selectedMarket.id
@@ -296,8 +517,8 @@
 							</div>
 						</div>
 
-						<div class="space-y-1 border-t border-border pt-2">
-							<p class="text-[10px] uppercase tracking-wide text-textMuted">Mock probability drift</p>
+						<div class="space-y-1 border-t border-border pt-2 opacity-50">
+							<p class="text-[10px] uppercase tracking-wide text-textMuted">Probability drift</p>
 							<p class="rounded-sm border border-border bg-panelAlt px-2 py-1.5 text-center text-xs tabular-nums">
 								<span class="text-textSecondary">{driftStart}</span>
 								<span class="mx-2 text-signalCyan">▂▃▄▅▃▆▇</span>
@@ -319,8 +540,8 @@
 							</div>
 						</div>
 
-						<div class="space-y-1 border-t border-border pt-2">
-							<p class="text-[10px] uppercase tracking-wide text-textMuted">Mock venue comparison</p>
+						<div class="space-y-1 border-t border-border pt-2 opacity-50">
+							<p class="text-[10px] uppercase tracking-wide text-textMuted">Venue comparison</p>
 							<div class="space-y-1 rounded-sm border border-border bg-panelAlt p-2">
 								<div class="flex justify-between">
 									<span>{selectedMarket.venue}</span>

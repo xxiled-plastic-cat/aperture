@@ -18,11 +18,7 @@
 			class="h-5 w-5 "
 		/>
 		<span class="font-mono text-sm uppercase tracking-[0.16em] text-textPrimary">Aperture Terminal</span>
-		<span
-			class={`rounded-sm border px-2 py-0.5 font-mono text-[11px] uppercase ${modeClass}`}
-		>
-			ALPHA FEED: {feedMode}
-		</span>
+		
 	</div>
 	<div class="flex items-center gap-4 font-mono text-[11px] text-textSecondary">
 		<span>{timestamp}</span>

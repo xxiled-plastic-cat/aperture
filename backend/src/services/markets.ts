@@ -1,6 +1,7 @@
 import { loadAlphaApiSnapshot } from '../alpha/client';
 import { loadAlphaDbSnapshot } from '../alpha/db';
 import { loadKalshiApiSnapshot, type KalshiMarket } from '../kalshi/client';
+import { loadPolymarketDbSnapshot } from '../polymarket/db';
 import { loadPolymarketApiSnapshot, type PolymarketMarket } from '../polymarket/client';
 import type { AlphaMarket, MarketCategory, MarketRow, MarketSignal, MarketsApiResponse, Venue } from '../types';
 
@@ -30,7 +31,7 @@ const toSignals = (
 	const lowLiquidity = (market.liquidityUsd ?? 0) > 0 && (market.liquidityUsd ?? 0) < 300;
 
 	if (spreadPct >= 3) signals.push('SPREAD');
-	if (hasTwoSidedPrices && market.yesPrice !== null && market.noPrice !== null && Math.abs(market.yesPrice - market.noPrice) <= 0.03) {
+	if (hasTwoSidedPrices && market.yesPrice !== null && market.noPrice !== null && spreadPct > 0) {
 		signals.push('PARITY');
 	}
 	if (hasReward) signals.push('REWARD');
@@ -133,6 +134,7 @@ const toKalshiRow = (market: KalshiMarket): MarketRow => {
 
 export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
 	const dbSnapshot = await loadAlphaDbSnapshot();
+	const polyDbSnapshot = await loadPolymarketDbSnapshot();
 	const apiSnapshot = await loadAlphaApiSnapshot(dbSnapshot.liveMarkets).catch(() => ({
 		markets: [],
 		orderbooks: new Map(),
@@ -140,10 +142,10 @@ export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
 		ok: false,
 		error: 'Failed to load Alpha API snapshot'
 	}));
-	const polySnapshot = await loadPolymarketApiSnapshot().catch(() => ({
+	const polySnapshot = await loadPolymarketApiSnapshot(polyDbSnapshot.liveMarkets).catch(() => ({
 		markets: [],
 		fetchedAtIso: new Date().toISOString(),
-		ok: false,
+		ok: polyDbSnapshot.liveMarkets.length > 0,
 		error: 'Failed to load Polymarket API snapshot'
 	}));
 	const kalshiSnapshot = await loadKalshiApiSnapshot().catch(() => ({
@@ -160,7 +162,9 @@ export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
 	const hasAlpha = apiSnapshot.ok && alphaMarkets.length > 0;
 	const hasPoly = polySnapshot.ok && polyMarkets.length > 0;
 	const hasKalshi = kalshiSnapshot.ok && kalshiMarkets.length > 0;
-	const hasDbData = dbSnapshot.ok && dbSnapshot.liveMarkets.length > 0;
+	const hasDbData =
+		(dbSnapshot.ok && dbSnapshot.liveMarkets.length > 0) ||
+		(polyDbSnapshot.ok && polyDbSnapshot.liveMarkets.length > 0);
 	const feedMode =
 		hasAlpha && hasPoly && hasKalshi ? 'LIVE' : hasAlpha || hasPoly || hasKalshi || hasDbData ? 'PARTIAL' : 'STATIC';
 	const venues: Venue[] = [];
@@ -181,6 +185,9 @@ export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
 			alphaDbOk: dbSnapshot.ok,
 			alphaDbError: dbSnapshot.error,
 			alphaDbLiveMarkets: dbSnapshot.liveMarkets.length,
+			polyDbOk: polyDbSnapshot.ok,
+			polyDbError: polyDbSnapshot.error,
+			polyDbLiveMarkets: polyDbSnapshot.liveMarkets.length,
 			polyApiOk: polySnapshot.ok,
 			polyApiError: polySnapshot.error,
 			kalshiApiOk: kalshiSnapshot.ok,
