@@ -64,7 +64,8 @@ const mapMarket = (market: Market): AlphaMarket => {
 		noPrice: normalizeProbability(market.noProb),
 		liquidityUsd: normalizeMoney(market.volume),
 		dailyRewardsUsd: rewardRaw !== null ? rewardRaw / 1_000_000 : null,
-		isLive: typeof market.isLive === 'boolean' ? market.isLive : null
+		isLive: typeof market.isLive === 'boolean' ? market.isLive : null,
+		isResolved: typeof market.isResolved === 'boolean' ? market.isResolved : null
 	};
 };
 
@@ -79,7 +80,8 @@ const mapDbLiveMarket = (market: AlphaDbLiveMarket): AlphaMarket => {
 		noPrice: null,
 		liquidityUsd: null,
 		dailyRewardsUsd: null,
-		isLive: true
+		isLive: true,
+		isResolved: false
 	};
 };
 

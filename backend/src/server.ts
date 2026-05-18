@@ -4,6 +4,7 @@ import cors from 'cors';
 import express from 'express';
 
 import { buildDashboardResponse } from './services/dashboard';
+import { buildMarketsResponse } from './services/markets';
 
 const app = express();
 const port = Number(process.env.PORT ?? 8787);
@@ -30,6 +31,18 @@ app.get('/api/dashboard', async (_req, res) => {
 		res.status(500).json({
 			ok: false,
 			error: error instanceof Error ? error.message : 'Unknown dashboard error'
+		});
+	}
+});
+
+app.get('/api/markets', async (_req, res) => {
+	try {
+		const markets = await buildMarketsResponse();
+		res.json(markets);
+	} catch (error) {
+		res.status(500).json({
+			ok: false,
+			error: error instanceof Error ? error.message : 'Unknown markets error'
 		});
 	}
 });

@@ -61,6 +61,7 @@ export type AlphaMarket = {
 	liquidityUsd: number | null;
 	dailyRewardsUsd: number | null;
 	isLive: boolean | null;
+	isResolved: boolean | null;
 };
 
 export type AlphaOrderbook = {
@@ -119,6 +120,47 @@ export type DashboardApiResponse = DashboardViewModel & {
 		dbOk: boolean;
 		dbError?: string;
 		dbLiveMarkets: number;
+		fetchedAtIso: string;
+	};
+};
+
+export type Venue = 'Alpha' | 'Polymarket' | 'Kalshi';
+export type MarketCategory = 'Sports' | 'Crypto' | 'Politics' | 'Macro' | 'Culture' | 'Tech';
+export type MarketSignal = 'SPREAD' | 'PARITY' | 'REWARD' | 'STALE' | 'LOW LIQ' | 'NONE';
+
+export type MarketRow = {
+	id: string;
+	name: string;
+	venue: Venue;
+	category: MarketCategory;
+	yesPrice: number;
+	noPrice: number;
+	spread: number;
+	volume: number;
+	liquidity: number;
+	reward: boolean;
+	expiry: string;
+	signals: MarketSignal[];
+	updated: string;
+};
+
+export type MarketsApiResponse = {
+	dashboardTimestamp: string;
+	feedMode: FeedMode;
+	venues: Venue[];
+	activeVenueCount: number;
+	marketsIndexed: number;
+	markets: MarketRow[];
+	meta: {
+		alphaApiOk: boolean;
+		alphaApiError?: string;
+		alphaDbOk: boolean;
+		alphaDbError?: string;
+		alphaDbLiveMarkets: number;
+		polyApiOk: boolean;
+		polyApiError?: string;
+		kalshiApiOk: boolean;
+		kalshiApiError?: string;
 		fetchedAtIso: string;
 	};
 };

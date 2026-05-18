@@ -8,7 +8,7 @@ export const navItems = [
 	'Venues',
 	'Portfolio',
 	'Alerts',
-	'Settings'
+	'Workspace'
 ];
 
 export const commandPrompts = ['scan parity gaps', 'show reward lanes', 'find stale prices'];
