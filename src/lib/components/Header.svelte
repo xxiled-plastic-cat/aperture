@@ -1,5 +1,13 @@
 <script lang="ts">
 	export let timestamp: string;
+	export let feedMode: 'LIVE' | 'PARTIAL' | 'STATIC' = 'STATIC';
+
+	$: modeClass =
+		feedMode === 'LIVE'
+			? 'border-terminalGreen/40 bg-terminalGreen/10 text-terminalGreen'
+			: feedMode === 'PARTIAL'
+				? 'border-amber/40 bg-amber/10 text-amber'
+				: 'border-border bg-panelAlt text-textMuted';
 </script>
 
 <header class="flex items-center justify-between gap-3 border-b border-border bg-panel px-4 py-2">
@@ -11,9 +19,9 @@
 		/>
 		<span class="font-mono text-sm uppercase tracking-[0.16em] text-textPrimary">Aperture Terminal</span>
 		<span
-			class="rounded-sm border border-terminalGreen/40 bg-terminalGreen/10 px-2 py-0.5 font-mono text-[11px] uppercase text-terminalGreen"
+			class={`rounded-sm border px-2 py-0.5 font-mono text-[11px] uppercase ${modeClass}`}
 		>
-			ALPHA FEED: STATIC
+			ALPHA FEED: {feedMode}
 		</span>
 	</div>
 	<div class="flex items-center gap-4 font-mono text-[11px] text-textSecondary">
