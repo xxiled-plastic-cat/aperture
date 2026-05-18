@@ -1,6 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+
 	export let timestamp: string;
 	export let feedMode: 'LIVE' | 'PARTIAL' | 'STATIC' = 'STATIC';
+
+	const formatUtcTimestamp = (date: Date) => `${date.toISOString().slice(0, 19).replace('T', ' ')} UTC`;
+
+	let currentTimestamp = timestamp;
 
 	$: modeClass =
 		feedMode === 'LIVE'
@@ -8,6 +14,19 @@
 			: feedMode === 'PARTIAL'
 				? 'border-amber/40 bg-amber/10 text-amber'
 				: 'border-border bg-panelAlt text-textMuted';
+
+	onMount(() => {
+		const updateClock = () => {
+			currentTimestamp = formatUtcTimestamp(new Date());
+		};
+
+		updateClock();
+		const intervalId = setInterval(updateClock, 1000);
+
+		return () => {
+			clearInterval(intervalId);
+		};
+	});
 </script>
 
 <header class="flex items-center justify-between gap-3 border-b border-border bg-panel px-4 py-2">
@@ -21,7 +40,6 @@
 		
 	</div>
 	<div class="flex items-center gap-4 font-mono text-[11px] text-textSecondary">
-		<span>{timestamp}</span>
-		<span class="text-mutedGold">/ scan markets</span>
+		<span>{currentTimestamp}</span>
 	</div>
 </header>

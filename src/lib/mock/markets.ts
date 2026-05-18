@@ -31,8 +31,8 @@ export const navItems = [
 ];
 
 export const stats: Stat[] = [
-	{ label: 'Total Markets', value: '128' },
-	{ label: 'Active Venues', value: '1' },
+	{ label: 'Total Markets', value: '384' },
+	{ label: 'Active Venues', value: '3' },
 	{ label: 'Avg Spread', value: '4.2%' },
 	{ label: 'Open Signal Count', value: '17' },
 	{ label: 'Reward Eligible', value: '9' },
@@ -105,15 +105,35 @@ export const marketFeed = [
 	'12:31:08  new market indexed: US CPI above forecast'
 ];
 
-export const venueHealth = {
-	venue: 'Alpha Arcade',
-	status: 'Online',
-	marketsIndexed: '128',
-	lastSync: '8s ago',
-	apiMode: 'Mock',
-	liquidityScore: '42/100',
-	volumeSignal: 'Low'
-};
+export const venueHealth = [
+	{
+		venue: 'Alpha',
+		status: 'Online',
+		marketsIndexed: '128',
+		lastSync: '8s ago',
+		apiMode: 'Mock',
+		liquidityScore: '42/100',
+		volumeSignal: 'Low'
+	},
+	{
+		venue: 'Polymarket',
+		status: 'Online',
+		marketsIndexed: '128',
+		lastSync: '8s ago',
+		apiMode: 'Mock',
+		liquidityScore: '55/100',
+		volumeSignal: 'Tracked'
+	},
+	{
+		venue: 'Kalshi',
+		status: 'Online',
+		marketsIndexed: '128',
+		lastSync: '8s ago',
+		apiMode: 'Mock',
+		liquidityScore: '48/100',
+		volumeSignal: 'Tracked'
+	}
+];
 
 export const probabilityDrift = {
 	market: 'BTC above $100k in June',

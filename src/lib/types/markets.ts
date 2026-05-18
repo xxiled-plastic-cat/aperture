@@ -33,6 +33,9 @@ export type MarketsApiResponse = {
 		alphaDbOk: boolean;
 		alphaDbError?: string;
 		alphaDbLiveMarkets: number;
+		polyDbOk: boolean;
+		polyDbError?: string;
+		polyDbLiveMarkets: number;
 		polyApiOk: boolean;
 		polyApiError?: string;
 		kalshiApiOk: boolean;

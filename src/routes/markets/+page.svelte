@@ -1,10 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-
 	import CommandBar from '$lib/components/CommandBar.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
-	import { dashboardTimestamp, mockMarkets, navItems } from '$lib/mock/markets';
+	import { fallbackMarketsData, getMarketDataContext, venueOrder } from '$lib/context/marketData';
+	import { navItems } from '$lib/mock/markets';
 	import type { MarketRow, MarketSignal, MarketsApiResponse, Venue } from '$lib/types/markets';
 
 	type ChipFilter =
@@ -54,8 +53,6 @@
 		'High Liquidity',
 		'Expiring Soon'
 	];
-	const venueOrder: Venue[] = ['Alpha', 'Polymarket', 'Kalshi'];
-
 	const signalTone: Record<MarketSignal, string> = {
 		SPREAD: 'border-terminalGreen/45 bg-terminalGreen/10 text-terminalGreen',
 		PARITY: 'border-mutedGold/45 bg-mutedGold/10 text-mutedGold',
@@ -65,25 +62,17 @@
 		NONE: 'border-border bg-panelAlt text-textMuted'
 	};
 
-	const fallbackData: MarketsApiResponse = {
-		dashboardTimestamp,
-		feedMode: 'STATIC',
-		venues: ['Alpha'],
-		activeVenueCount: 1,
-		marketsIndexed: mockMarkets.length,
-		markets: mockMarkets
-	};
+	const marketData = getMarketDataContext();
+	let data: MarketsApiResponse = fallbackMarketsData;
 
-	let data: MarketsApiResponse = fallbackData;
-
-	const defaultMarket = fallbackData.markets[0]!;
+	const defaultMarket = fallbackMarketsData.markets[0]!;
 
 	let activeChip: ChipFilter = 'All';
 	let activeVenue: VenueFilter = 'All';
 	let selectedMarketId = defaultMarket.id;
 	let sortColumn: SortColumn | null = null;
 	let sortDirection: SortDirection = 'desc';
-	let displayMarkets: MarketRow[] = fallbackData.markets;
+	let displayMarkets: MarketRow[] = fallbackMarketsData.markets;
 	let isMarketsLoading = true;
 	let venueLoadState: Record<Venue, VenueLoadState> = {
 		Alpha: 'loading',
@@ -174,27 +163,9 @@
 		return expiryDays(market.expiry) <= 14;
 	};
 
-	const setVenueLoadState = (venue: Venue, state: VenueLoadState) => {
-		venueLoadState = { ...venueLoadState, [venue]: state };
-	};
-
-	const loadVenueStatus = async (baseUrl: string, venue: Venue, slug: 'alpha' | 'polymarket' | 'kalshi') => {
-		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), 12000);
-		try {
-			const response = await fetch(`${baseUrl}/api/markets/status/${slug}`, { signal: controller.signal });
-			if (!response.ok) {
-				setVenueLoadState(venue, 'error');
-				return;
-			}
-			const payload = (await response.json()) as { ok?: boolean };
-			setVenueLoadState(venue, payload.ok === false ? 'error' : 'ready');
-		} catch {
-			setVenueLoadState(venue, 'error');
-		} finally {
-			clearTimeout(timeout);
-		}
-	};
+	$: data = $marketData.data;
+	$: isMarketsLoading = $marketData.isLoading;
+	$: venueLoadState = $marketData.venueLoadState;
 
 	$: venueFilters = venueOrder.filter(
 		(venue) => data.venues.includes(venue) || data.markets.some((market) => market.venue === venue)
@@ -214,15 +185,6 @@
 				? 'ready'
 				: venueLoadState.Kalshi
 	};
-
-	$: {
-		for (const venue of venueOrder) {
-			const hasVenueMarkets = data.markets.some((market) => market.venue === venue);
-			if (hasVenueMarkets && venueLoadState[venue] === 'loading') {
-				setVenueLoadState(venue, 'ready');
-			}
-		}
-	}
 
 	$: filteredMarkets = data.markets.filter((market) => {
 		const venueMatch = activeVenue === 'All' || market.venue === activeVenue;
@@ -265,45 +227,6 @@
 		sortDirection = 'desc';
 	};
 
-	onMount(async () => {
-		isMarketsLoading = true;
-		venueLoadState = { Alpha: 'loading', Polymarket: 'loading', Kalshi: 'loading' };
-		const baseUrl = (
-			(import.meta.env.PUBLIC_API_BASE_URL as string | undefined) ??
-			(import.meta.env.VITE_PUBLIC_API_BASE_URL as string | undefined)
-		)?.trim();
-		if (!baseUrl) {
-			isMarketsLoading = false;
-			venueLoadState = { Alpha: 'error', Polymarket: 'error', Kalshi: 'error' };
-			return;
-		}
-
-		void loadVenueStatus(baseUrl, 'Alpha', 'alpha');
-		void loadVenueStatus(baseUrl, 'Polymarket', 'polymarket');
-		void loadVenueStatus(baseUrl, 'Kalshi', 'kalshi');
-
-		try {
-			const response = await fetch(`${baseUrl}/api/markets`);
-			if (!response.ok) return;
-			const payload = (await response.json()) as MarketsApiResponse;
-			if (payload && Array.isArray(payload.markets)) {
-				data = {
-					...payload,
-					marketsIndexed: payload.marketsIndexed || payload.markets.length
-				};
-				for (const venue of venueOrder) {
-					const hasVenue =
-						(payload.venues?.includes(venue) ?? false) || payload.markets.some((market) => market.venue === venue);
-					if (hasVenue) setVenueLoadState(venue, 'ready');
-				}
-			}
-		} catch {
-			// Keep static fallback when backend is unavailable.
-			venueLoadState = { Alpha: 'error', Polymarket: 'error', Kalshi: 'error' };
-		} finally {
-			isMarketsLoading = false;
-		}
-	});
 </script>
 
 <svelte:head>

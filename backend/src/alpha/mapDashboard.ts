@@ -104,15 +104,17 @@ export const mapDashboard = (api: AlphaApiSnapshot, db: AlphaDbSnapshot): Dashbo
 	const botTotalPnl = db.botState?.totalPnl ?? 0;
 	const liquidityPool = api.markets.reduce((acc, market) => acc + (market.liquidityUsd ?? 0), 0);
 	const liquidityScore = Math.min(100, Math.round(liquidityPool / 5000));
-	const venueHealth = {
-		venue: 'Alpha Arcade',
-		status: feedMode === 'LIVE' ? 'Online' : feedMode === 'PARTIAL' ? 'Degraded' : 'Fallback',
-		marketsIndexed: String(api.markets.length || db.marketStatus?.totalKnownMarkets || 0),
-		lastSync: feedMode === 'STATIC' ? 'n/a' : 'just now',
-		apiMode: feedMode === 'LIVE' ? 'Hybrid' : feedMode === 'PARTIAL' ? 'Partial' : 'Mock',
-		liquidityScore: `${liquidityScore}/100`,
-		volumeSignal: botCash > 0 || botTotalPnl !== 0 ? 'Tracked' : liquidityPool > 25_000 ? 'High' : 'Low'
-	};
+	const venueHealth = [
+		{
+			venue: 'Alpha',
+			status: feedMode === 'LIVE' ? 'Online' : feedMode === 'PARTIAL' ? 'Degraded' : 'Fallback',
+			marketsIndexed: String(api.markets.length || db.marketStatus?.totalKnownMarkets || 0),
+			lastSync: feedMode === 'STATIC' ? 'n/a' : 'just now',
+			apiMode: feedMode === 'LIVE' ? 'Hybrid' : feedMode === 'PARTIAL' ? 'Partial' : 'Mock',
+			liquidityScore: `${liquidityScore}/100`,
+			volumeSignal: botCash > 0 || botTotalPnl !== 0 ? 'Tracked' : liquidityPool > 25_000 ? 'High' : 'Low'
+		}
+	];
 
 	const driftCandidate = signalRows[0];
 	const probabilityDrift = driftCandidate

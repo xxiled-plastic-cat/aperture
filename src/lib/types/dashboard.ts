@@ -16,7 +16,7 @@ export type DashboardViewModel = {
 		apiMode: string;
 		liquidityScore: string;
 		volumeSignal: string;
-	};
+	}[];
 	probabilityDrift: {
 		market: string;
 		start: string;
@@ -32,11 +32,18 @@ export type DashboardViewModel = {
 
 export type DashboardApiResponse = DashboardViewModel & {
 	meta?: {
-		apiOk: boolean;
-		apiError?: string;
-		dbOk: boolean;
-		dbError?: string;
-		dbLiveMarkets: number;
+		alphaApiOk: boolean;
+		alphaApiError?: string;
+		alphaDbOk: boolean;
+		alphaDbError?: string;
+		alphaDbLiveMarkets: number;
+		polyDbOk: boolean;
+		polyDbError?: string;
+		polyDbLiveMarkets: number;
+		polyApiOk: boolean;
+		polyApiError?: string;
+		kalshiApiOk: boolean;
+		kalshiApiError?: string;
 		fetchedAtIso: string;
 	};
 };

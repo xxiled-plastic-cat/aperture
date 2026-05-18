@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-
 	import CommandBar from '$lib/components/CommandBar.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import MarketFeed from '$lib/components/MarketFeed.svelte';
@@ -8,52 +6,16 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import SignalTable from '$lib/components/SignalTable.svelte';
 	import StatCard from '$lib/components/StatCard.svelte';
-	import type { DashboardApiResponse } from '$lib/types/dashboard';
 	import {
-		commandPrompts,
-		dashboardTimestamp,
-		marketFeed,
-		navItems,
-		probabilityDrift,
-		signalRows,
-		stats,
-		venueHealth
-	} from '$lib/mock/markets';
+		buildDashboardFromMarketSnapshot,
+		fallbackMarketDataSnapshot,
+		getMarketDataContext
+	} from '$lib/context/marketData';
+	import type { DashboardApiResponse } from '$lib/types/dashboard';
+	const marketData = getMarketDataContext();
+	let data: DashboardApiResponse = buildDashboardFromMarketSnapshot(fallbackMarketDataSnapshot);
 
-	const fallbackData: DashboardApiResponse = {
-		dashboardTimestamp,
-		navItems,
-		stats,
-		signalRows,
-		marketFeed,
-		venueHealth: { ...venueHealth, status: 'Fallback', apiMode: 'Mock' },
-		probabilityDrift,
-		commandPrompts,
-		feedMode: 'STATIC'
-	};
-
-	let data: DashboardApiResponse = fallbackData;
-
-	onMount(async () => {
-		const baseUrl = (
-			(import.meta.env.PUBLIC_API_BASE_URL as string | undefined) ??
-			(import.meta.env.VITE_PUBLIC_API_BASE_URL as string | undefined)
-		)?.trim();
-		if (!baseUrl) {
-			console.warn('PUBLIC_API_BASE_URL is missing; staying on fallback data.');
-			return;
-		}
-		try {
-			const response = await fetch(`${baseUrl}/api/dashboard`);
-			if (!response.ok) return;
-			const payload = (await response.json()) as DashboardApiResponse;
-			if (payload && Array.isArray(payload.stats) && Array.isArray(payload.signalRows)) {
-				data = payload;
-			}
-		} catch {
-			// Keep static fallback in UI when backend is unavailable.
-		}
-	});
+	$: data = buildDashboardFromMarketSnapshot($marketData);
 </script>
 
 <svelte:head>
@@ -83,40 +45,40 @@
 					</Panel>
 
 					<div class="grid gap-3 lg:grid-cols-3">
-						<Panel title="Market Feed" subtitle="ALPHA FEED">
+						<Panel title="Market Feed" subtitle="MULTI-VENUE FEED" fill={true}>
 							<MarketFeed events={data.marketFeed} />
 						</Panel>
 
-						<Panel title="Venue Health">
-							<div class="space-y-1 font-mono text-[11px] text-textSecondary">
-								<div class="flex justify-between border-b border-border/60 py-1">
-									<span>Venue</span>
-									<span class="text-textPrimary">{data.venueHealth.venue}</span>
-								</div>
-								<div class="flex justify-between border-b border-border/60 py-1">
-									<span>Status</span>
-									<span class={data.feedMode === 'LIVE' ? 'text-terminalGreen' : data.feedMode === 'PARTIAL' ? 'text-amber' : 'text-textMuted'}>{data.venueHealth.status}</span>
-								</div>
-								<div class="flex justify-between border-b border-border/60 py-1">
-									<span>Markets Indexed</span>
-									<span class="tabular-nums text-textPrimary">{data.venueHealth.marketsIndexed}</span>
-								</div>
-								<div class="flex justify-between border-b border-border/60 py-1">
-									<span>Last Sync</span>
-									<span>{data.venueHealth.lastSync}</span>
-								</div>
-								<div class="flex justify-between border-b border-border/60 py-1">
-									<span>API Mode</span>
-									<span class="text-mutedGold">{data.venueHealth.apiMode}</span>
-								</div>
-								<div class="flex justify-between border-b border-border/60 py-1">
-									<span>Liquidity Score</span>
-									<span>{data.venueHealth.liquidityScore}</span>
-								</div>
-								<div class="flex justify-between py-1">
-									<span>Volume Signal</span>
-									<span class="text-amber">{data.venueHealth.volumeSignal}</span>
-								</div>
+						<Panel title="Venue Health" subtitle={`${data.venueHealth.length} venues`}>
+							<div class="space-y-2 font-mono text-[11px] text-textSecondary">
+								{#each data.venueHealth as venue}
+									<div class="rounded-sm border border-border bg-panelAlt p-2">
+										<div class="mb-1 flex items-center justify-between">
+											<span class="text-textPrimary">{venue.venue}</span>
+											<span
+												class={venue.status === 'Online'
+													? 'text-terminalGreen'
+													: venue.status === 'Degraded'
+														? 'text-amber'
+														: 'text-textMuted'}
+											>
+												{venue.status}
+											</span>
+										</div>
+										<div class="grid grid-cols-2 gap-x-3 gap-y-1">
+											<span>Markets</span>
+											<span class="text-right tabular-nums text-textPrimary">{venue.marketsIndexed}</span>
+											<span>Last Sync</span>
+											<span class="text-right">{venue.lastSync}</span>
+											<span>API Mode</span>
+											<span class="text-right text-mutedGold">{venue.apiMode}</span>
+											<span>Liquidity</span>
+											<span class="text-right">{venue.liquidityScore}</span>
+											<span>Volume</span>
+											<span class="text-right text-amber">{venue.volumeSignal}</span>
+										</div>
+									</div>
+								{/each}
 							</div>
 						</Panel>
 

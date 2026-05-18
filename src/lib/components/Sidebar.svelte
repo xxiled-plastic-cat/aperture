@@ -22,18 +22,28 @@
 				<ul class="space-y-1">
 					{#each group as item}
 						{#if items.includes(item)}
+							{@const href = routeByItem[item]}
 							<li>
-								<a
-									href={routeByItem[item] ?? '#'}
-									class={`block w-full rounded-sm border px-2 py-1.5 text-left font-mono text-[11px] uppercase tracking-wide transition-colors ${
-										item === active
-											? 'border-terminalGreen/60 bg-terminalGreen/10 text-terminalGreen'
-											: 'border-transparent text-textSecondary hover:border-border hover:bg-panelAlt hover:text-textPrimary'
-									}`}
-									aria-current={item === active ? 'page' : undefined}
-								>
-									{item}
-								</a>
+								{#if href}
+									<a
+										href={href}
+										class={`block w-full rounded-sm border px-2 py-1.5 text-left font-mono text-[11px] uppercase tracking-wide transition-colors ${
+											item === active
+												? 'border-terminalGreen/60 bg-terminalGreen/10 text-terminalGreen'
+												: 'border-transparent text-textSecondary hover:border-border hover:bg-panelAlt hover:text-textPrimary'
+										}`}
+										aria-current={item === active ? 'page' : undefined}
+									>
+										{item}
+									</a>
+								{:else}
+									<span
+										class="block w-full cursor-not-allowed rounded-sm border border-transparent px-2 py-1.5 text-left font-mono text-[11px] uppercase tracking-wide text-textMuted/45"
+										aria-disabled="true"
+									>
+										{item}
+									</span>
+								{/if}
 							</li>
 						{/if}
 					{/each}

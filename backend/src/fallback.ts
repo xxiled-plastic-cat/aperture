@@ -17,8 +17,8 @@ export const fallbackDashboard: DashboardViewModel = {
 	dashboardTimestamp: '2026-05-18 13:18:42 UTC',
 	navItems,
 	stats: [
-		{ label: 'Total Markets', value: '128' },
-		{ label: 'Active Venues', value: '1' },
+		{ label: 'Total Markets', value: '384' },
+		{ label: 'Active Venues', value: '3' },
 		{ label: 'Avg Spread', value: '4.2%' },
 		{ label: 'Open Signal Count', value: '17' },
 		{ label: 'Reward Eligible', value: '9' },
@@ -53,15 +53,35 @@ export const fallbackDashboard: DashboardViewModel = {
 		'12:41:03  reward lane detected on Liverpool YES',
 		'12:39:44  parity deviation cleared: BTC > $100k'
 	],
-	venueHealth: {
-		venue: 'Alpha Arcade',
-		status: 'Fallback',
-		marketsIndexed: '128',
-		lastSync: 'n/a',
-		apiMode: 'Mock',
-		liquidityScore: '42/100',
-		volumeSignal: 'Low'
-	},
+	venueHealth: [
+		{
+			venue: 'Alpha',
+			status: 'Fallback',
+			marketsIndexed: '128',
+			lastSync: 'n/a',
+			apiMode: 'Mock',
+			liquidityScore: '42/100',
+			volumeSignal: 'Low'
+		},
+		{
+			venue: 'Polymarket',
+			status: 'Fallback',
+			marketsIndexed: '128',
+			lastSync: 'n/a',
+			apiMode: 'Mock',
+			liquidityScore: '55/100',
+			volumeSignal: 'Tracked'
+		},
+		{
+			venue: 'Kalshi',
+			status: 'Fallback',
+			marketsIndexed: '128',
+			lastSync: 'n/a',
+			apiMode: 'Mock',
+			liquidityScore: '48/100',
+			volumeSignal: 'Tracked'
+		}
+	],
 	probabilityDrift: {
 		market: 'BTC above $100k in June',
 		start: '0.49',
