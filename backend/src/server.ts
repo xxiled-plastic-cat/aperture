@@ -6,6 +6,7 @@ import express from 'express';
 import { loadAlphaApiSnapshot } from './alpha/client';
 import { loadAlphaDbSnapshot } from './alpha/db';
 import { loadKalshiApiSnapshot } from './kalshi/client';
+import { loadLimitlessApiSnapshot } from './limitless/client';
 import { loadPolymarketApiSnapshot } from './polymarket/client';
 import { loadPolymarketDbSnapshot } from './polymarket/db';
 import { buildDashboardResponse } from './services/dashboard';
@@ -104,6 +105,24 @@ app.get('/api/markets/status/kalshi', async (_req, res) => {
 			venue: 'Kalshi',
 			ok: false,
 			error: error instanceof Error ? error.message : 'Unknown Kalshi status error'
+		});
+	}
+});
+
+app.get('/api/markets/status/limitless', async (_req, res) => {
+	try {
+		const snapshot = await loadLimitlessApiSnapshot();
+		res.json({
+			venue: 'Limitless',
+			ok: snapshot.ok,
+			marketsIndexed: snapshot.markets.length,
+			error: snapshot.error
+		});
+	} catch (error) {
+		res.status(500).json({
+			venue: 'Limitless',
+			ok: false,
+			error: error instanceof Error ? error.message : 'Unknown Limitless status error'
 		});
 	}
 });

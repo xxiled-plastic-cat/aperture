@@ -154,7 +154,7 @@ export type DashboardApiResponse = DashboardViewModel & {
 	};
 };
 
-export type Venue = 'Alpha' | 'Polymarket' | 'Kalshi';
+export type Venue = 'Alpha' | 'Polymarket' | 'Kalshi' | 'Limitless';
 export type MarketCategory = 'Sports' | 'Crypto' | 'Politics' | 'Macro' | 'Culture' | 'Tech';
 export type MarketSignal = 'SPREAD' | 'PARITY' | 'REWARD' | 'STALE' | 'LOW LIQ' | 'NONE';
 
@@ -194,6 +194,8 @@ export type MarketsApiResponse = {
 		polyApiError?: string;
 		kalshiApiOk: boolean;
 		kalshiApiError?: string;
+		limitlessApiOk: boolean;
+		limitlessApiError?: string;
 		fetchedAtIso: string;
 	};
 };

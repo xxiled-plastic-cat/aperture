@@ -12,7 +12,7 @@ import {
 import type { DashboardApiResponse } from '$lib/types/dashboard';
 import type { MarketRow, MarketsApiResponse, Venue } from '$lib/types/markets';
 
-type VenueStatusSlug = 'alpha' | 'polymarket' | 'kalshi';
+type VenueStatusSlug = 'alpha' | 'polymarket' | 'kalshi' | 'limitless';
 
 export type VenueLoadState = 'loading' | 'ready' | 'error';
 
@@ -28,20 +28,22 @@ export type MarketDataContext = {
 	refresh: () => Promise<void>;
 };
 
-export const venueOrder: Venue[] = ['Alpha', 'Polymarket', 'Kalshi'];
+export const venueOrder: Venue[] = ['Alpha', 'Polymarket', 'Kalshi', 'Limitless'];
 
 const MARKET_DATA_CONTEXT_KEY = Symbol('market-data-context');
 
 const baseVenueLoadState: Record<Venue, VenueLoadState> = {
 	Alpha: 'loading',
 	Polymarket: 'loading',
-	Kalshi: 'loading'
+	Kalshi: 'loading',
+	Limitless: 'loading'
 };
 
 const venueSlugMap: Record<Venue, VenueStatusSlug> = {
 	Alpha: 'alpha',
 	Polymarket: 'polymarket',
-	Kalshi: 'kalshi'
+	Kalshi: 'kalshi',
+	Limitless: 'limitless'
 };
 
 export const fallbackMarketsData: MarketsApiResponse = {
@@ -60,7 +62,8 @@ export const fallbackMarketDataSnapshot: MarketDataSnapshot = {
 	venueLoadState: {
 		Alpha: 'ready',
 		Polymarket: 'error',
-		Kalshi: 'error'
+		Kalshi: 'error',
+		Limitless: 'error'
 	}
 };
 
@@ -253,7 +256,8 @@ const createMarketDataContext = (): MarketDataContext => {
 				venueLoadState: {
 					Alpha: 'error',
 					Polymarket: 'error',
-					Kalshi: 'error'
+					Kalshi: 'error',
+					Limitless: 'error'
 				}
 			});
 			return;
@@ -307,7 +311,8 @@ const createMarketDataContext = (): MarketDataContext => {
 				venueLoadState: {
 					Alpha: 'error',
 					Polymarket: 'error',
-					Kalshi: 'error'
+					Kalshi: 'error',
+					Limitless: 'error'
 				}
 			});
 		}

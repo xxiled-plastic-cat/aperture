@@ -77,12 +77,20 @@
 	let venueLoadState: Record<Venue, VenueLoadState> = {
 		Alpha: 'loading',
 		Polymarket: 'loading',
-		Kalshi: 'loading'
+		Kalshi: 'loading',
+		Limitless: 'loading'
 	};
 	let venueBadgeStateMap: Record<Venue, VenueLoadState | 'ready'> = {
 		Alpha: 'loading',
 		Polymarket: 'loading',
-		Kalshi: 'loading'
+		Kalshi: 'loading',
+		Limitless: 'loading'
+	};
+
+	const venueBadgeClass = (venue: Venue): string => {
+		if (venue === 'Polymarket') return 'border-signalCyan/45 bg-signalCyan/10 text-signalCyan';
+		if (venue === 'Limitless') return 'border-mutedGold/45 bg-mutedGold/10 text-mutedGold';
+		return 'border-terminalGreen/40 bg-terminalGreen/10 text-terminalGreen';
 	};
 
 	const formatCurrency = (value: number) =>
@@ -171,20 +179,14 @@
 		(venue) => data.venues.includes(venue) || data.markets.some((market) => market.venue === venue)
 	);
 
-	$: venueBadgeStateMap = {
-		Alpha:
-			data.venues.includes('Alpha') || data.markets.some((market) => market.venue === 'Alpha')
+	$: venueBadgeStateMap = Object.fromEntries(
+		venueOrder.map((venue) => [
+			venue,
+			data.venues.includes(venue) || data.markets.some((market) => market.venue === venue)
 				? 'ready'
-				: venueLoadState.Alpha,
-		Polymarket:
-			data.venues.includes('Polymarket') || data.markets.some((market) => market.venue === 'Polymarket')
-				? 'ready'
-				: venueLoadState.Polymarket,
-		Kalshi:
-			data.venues.includes('Kalshi') || data.markets.some((market) => market.venue === 'Kalshi')
-				? 'ready'
-				: venueLoadState.Kalshi
-	};
+				: venueLoadState[venue]
+		])
+	) as Record<Venue, VenueLoadState | 'ready'>;
 
 	$: filteredMarkets = data.markets.filter((market) => {
 		const venueMatch = activeVenue === 'All' || market.venue === activeVenue;
@@ -262,9 +264,7 @@
 												? 'border-border bg-panelAlt text-textMuted animate-pulse'
 												: venueBadgeStateMap[venue] === 'error'
 													? 'border-danger/45 bg-danger/10 text-danger'
-													: venue === 'Polymarket'
-														? 'border-signalCyan/45 bg-signalCyan/10 text-signalCyan'
-														: 'border-terminalGreen/40 bg-terminalGreen/10 text-terminalGreen'
+													: venueBadgeClass(venue)
 										}`}
 									>
 										{venue}

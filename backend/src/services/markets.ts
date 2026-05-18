@@ -1,6 +1,7 @@
 import { loadAlphaApiSnapshot } from '../alpha/client';
 import { loadAlphaDbSnapshot } from '../alpha/db';
 import { loadKalshiApiSnapshot, type KalshiMarket } from '../kalshi/client';
+import { loadLimitlessApiSnapshot, type LimitlessMarket } from '../limitless/client';
 import { loadPolymarketDbSnapshot } from '../polymarket/db';
 import { loadPolymarketApiSnapshot, type PolymarketMarket } from '../polymarket/client';
 import type { AlphaMarket, MarketCategory, MarketRow, MarketSignal, MarketsApiResponse, Venue } from '../types';
@@ -8,9 +9,44 @@ import type { AlphaMarket, MarketCategory, MarketRow, MarketSignal, MarketsApiRe
 const formatUtcTimestamp = (date: Date): string =>
 	date.toISOString().replace('T', ' ').replace('Z', ' UTC');
 
+const LIMITLESS_CATEGORY_ALIASES: Record<string, MarketCategory> = {
+	crypto: 'Crypto',
+	bitcoin: 'Crypto',
+	ethereum: 'Crypto',
+	solana: 'Crypto',
+	xrp: 'Crypto',
+	sports: 'Sports',
+	sport: 'Sports',
+	politics: 'Politics',
+	politic: 'Politics',
+	finance: 'Macro',
+	macro: 'Macro',
+	culture: 'Culture',
+	tech: 'Tech',
+	'esports': 'Tech',
+	esport: 'Tech'
+};
+
+const categoryFromLimitless = (market: LimitlessMarket): MarketCategory => {
+	if (market.assetType?.trim().toUpperCase() === 'CRYPTO') return 'Crypto';
+
+	for (const category of market.categories) {
+		const normalized = category.trim().toLowerCase();
+		const mapped = LIMITLESS_CATEGORY_ALIASES[normalized];
+		if (mapped) return mapped;
+	}
+
+	return categoryFromTitle(market.title);
+};
+
 const categoryFromTitle = (title: string): MarketCategory => {
 	const normalized = title.toLowerCase();
-	if (/(bitcoin|btc|eth|solana|crypto|token|defi|altcoin)/.test(normalized)) return 'Crypto';
+	if (
+		/(bitcoin|btc|eth|ethereum|solana|sol\b|bnb|xrp|doge|hype|ondo|bch|xmr|crypto|token|defi|altcoin|up or down)/.test(
+			normalized
+		)
+	)
+		return 'Crypto';
 	if (/(election|senate|president|government|parliament|vote|politic)/.test(normalized))
 		return 'Politics';
 	if (/(fed|cpi|inflation|gdp|oil|rate|macro|yield|recession)/.test(normalized)) return 'Macro';
@@ -45,6 +81,7 @@ const mapCommonRow = ({
 	id,
 	name,
 	venue,
+	category,
 	yesPrice,
 	noPrice,
 	liquidityUsd,
@@ -54,6 +91,7 @@ const mapCommonRow = ({
 	id: string;
 	name: string;
 	venue: Venue;
+	category?: MarketCategory;
 	yesPrice: number | null;
 	noPrice: number | null;
 	liquidityUsd: number | null;
@@ -80,7 +118,7 @@ const mapCommonRow = ({
 		id,
 		name,
 		venue,
-		category: categoryFromTitle(name),
+		category: category ?? categoryFromTitle(name),
 		yesPrice: Number(safeYes.toFixed(2)),
 		noPrice: Number(safeNo.toFixed(2)),
 		spread: Number(spread.toFixed(1)),
@@ -132,6 +170,24 @@ const toKalshiRow = (market: KalshiMarket): MarketRow => {
 	});
 };
 
+const toLimitlessRow = (market: LimitlessMarket): MarketRow => {
+	const row = mapCommonRow({
+		id: market.slug,
+		name: market.title,
+		venue: 'Limitless',
+		category: categoryFromLimitless(market),
+		yesPrice: market.yesPrice,
+		noPrice: market.noPrice,
+		liquidityUsd: market.liquidityUsd ?? market.volumeUsd,
+		dailyRewardsUsd: market.dailyRewardsUsd,
+		isResolved: market.isResolved
+	});
+	return {
+		...row,
+		expiry: market.expiryLabel
+	};
+};
+
 export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
 	const dbSnapshot = await loadAlphaDbSnapshot();
 	const polyDbSnapshot = await loadPolymarketDbSnapshot();
@@ -154,23 +210,35 @@ export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
 		ok: false,
 		error: 'Failed to load Kalshi API snapshot'
 	}));
+	const limitlessSnapshot = await loadLimitlessApiSnapshot().catch(() => ({
+		markets: [],
+		fetchedAtIso: new Date().toISOString(),
+		ok: false,
+		error: 'Failed to load Limitless API snapshot'
+	}));
 
 	const alphaMarkets = apiSnapshot.markets.map(toAlphaMarketRow);
 	const polyMarkets = polySnapshot.markets.map(toPolymarketRow);
 	const kalshiMarkets = kalshiSnapshot.markets.map(toKalshiRow);
-	const markets = [...alphaMarkets, ...polyMarkets, ...kalshiMarkets].sort((a, b) => b.volume - a.volume);
+	const limitlessMarkets = limitlessSnapshot.markets.map(toLimitlessRow);
+	const markets = [...alphaMarkets, ...polyMarkets, ...kalshiMarkets, ...limitlessMarkets].sort(
+		(a, b) => b.volume - a.volume
+	);
 	const hasAlpha = apiSnapshot.ok && alphaMarkets.length > 0;
 	const hasPoly = polySnapshot.ok && polyMarkets.length > 0;
 	const hasKalshi = kalshiSnapshot.ok && kalshiMarkets.length > 0;
+	const hasLimitless = limitlessSnapshot.ok && limitlessMarkets.length > 0;
 	const hasDbData =
 		(dbSnapshot.ok && dbSnapshot.liveMarkets.length > 0) ||
 		(polyDbSnapshot.ok && polyDbSnapshot.liveMarkets.length > 0);
+	const liveVenueCount = [hasAlpha, hasPoly, hasKalshi, hasLimitless].filter(Boolean).length;
 	const feedMode =
-		hasAlpha && hasPoly && hasKalshi ? 'LIVE' : hasAlpha || hasPoly || hasKalshi || hasDbData ? 'PARTIAL' : 'STATIC';
+		liveVenueCount >= 4 ? 'LIVE' : liveVenueCount > 0 || hasDbData ? 'PARTIAL' : 'STATIC';
 	const venues: Venue[] = [];
 	if (alphaMarkets.length > 0) venues.push('Alpha');
 	if (polyMarkets.length > 0) venues.push('Polymarket');
 	if (kalshiMarkets.length > 0) venues.push('Kalshi');
+	if (limitlessMarkets.length > 0) venues.push('Limitless');
 
 	return {
 		dashboardTimestamp: formatUtcTimestamp(new Date()),
@@ -192,6 +260,8 @@ export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
 			polyApiError: polySnapshot.error,
 			kalshiApiOk: kalshiSnapshot.ok,
 			kalshiApiError: kalshiSnapshot.error,
+			limitlessApiOk: limitlessSnapshot.ok,
+			limitlessApiError: limitlessSnapshot.error,
 			fetchedAtIso: new Date().toISOString()
 		}
 	};
