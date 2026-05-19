@@ -30,5 +30,6 @@ npm run dev
 
 ## API endpoints
 
-- `GET /api/dashboard`
-- `GET /api/health`
+- `GET /api/health` — service status and markets aggregation summary (`feedMode`, `meta`)
+- `GET /api/markets` — canonical multi-venue market snapshot (frontend builds dashboard UI from this)
+- `GET /api/markets/status/{alpha|polymarket|kalshi|limitless}` — per-venue connectivity

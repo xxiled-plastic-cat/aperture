@@ -92,7 +92,9 @@ const loadLiveMarkets = async (db: ReturnType<typeof drizzle>): Promise<AlphaDbL
 			marketAppId: alphaMarketStatus.marketAppId,
 			marketId: alphaMarketStatus.marketId,
 			slug: alphaMarketStatus.slug,
-			lastSeenAt: alphaMarketStatus.lastSeenAt
+			lastSeenAt: alphaMarketStatus.lastSeenAt,
+			endTs: alphaMarketStatus.endTs,
+			closeTime: alphaMarketStatus.closeTime
 		})
 		.from(alphaMarketStatus)
 		.where(and(eq(alphaMarketStatus.isLive, true), eq(alphaMarketStatus.isResolved, false)))
@@ -107,7 +109,9 @@ const loadLiveMarkets = async (db: ReturnType<typeof drizzle>): Promise<AlphaDbL
 				marketAppId,
 				marketId: row.marketId ?? null,
 				slug: row.slug ?? null,
-				lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null
+				lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
+				endTs: toNumber(row.endTs),
+				closeTime: row.closeTime ? row.closeTime.toISOString() : null
 			} satisfies AlphaDbLiveMarket;
 		})
 		.filter((row): row is AlphaDbLiveMarket => row !== null);

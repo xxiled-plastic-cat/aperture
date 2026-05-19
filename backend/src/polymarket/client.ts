@@ -17,6 +17,8 @@ export type PolymarketMarket = {
 	liquidityUsd: number | null;
 	volumeUsd: number | null;
 	dailyRewardsUsd: number | null;
+	endDateIso: string | null;
+	updatedAtIso: string | null;
 	isLive: boolean | null;
 	isResolved: boolean | null;
 };
@@ -71,6 +73,19 @@ const normalizeUsd = (value: unknown): number | null => {
 	const numberValue = toNumberValue(value);
 	if (numberValue === null || numberValue < 0) return null;
 	return numberValue;
+};
+
+const toIsoTimestamp = (value: unknown): string | null => {
+	if (typeof value === 'string') {
+		const trimmed = value.trim();
+		if (!trimmed) return null;
+		const parsed = Date.parse(trimmed);
+		return Number.isFinite(parsed) ? new Date(parsed).toISOString() : trimmed;
+	}
+	const numberValue = toNumberValue(value);
+	if (numberValue === null || numberValue <= 0) return null;
+	const ms = numberValue > 1_000_000_000_000 ? numberValue : numberValue * 1000;
+	return new Date(ms).toISOString();
 };
 
 const withTrailingTrim = (url: string): string => url.replace(/\/+$/, '');
@@ -203,6 +218,16 @@ const toPolymarketMarket = (raw: unknown, rewardsIndex: RewardIndex): Polymarket
 	const resolved = toBooleanValue(record.resolved);
 	const isResolved = resolved === true || isClosed === true;
 	const isLive = isResolved ? false : active !== null ? active : isClosed !== null ? !isClosed : null;
+	const endDateIso =
+		toIsoTimestamp(record.endDateIso) ??
+		toIsoTimestamp(record.end_date_iso) ??
+		toIsoTimestamp(record.endDate) ??
+		toIsoTimestamp(record.end_date);
+	const updatedAtIso =
+		toIsoTimestamp(record.updatedAt) ??
+		toIsoTimestamp(record.updated_at) ??
+		toIsoTimestamp(record.createdAt) ??
+		toIsoTimestamp(record.created_at);
 
 	return {
 		id,
@@ -214,6 +239,8 @@ const toPolymarketMarket = (raw: unknown, rewardsIndex: RewardIndex): Polymarket
 		liquidityUsd,
 		volumeUsd,
 		dailyRewardsUsd,
+		endDateIso,
+		updatedAtIso,
 		isLive,
 		isResolved
 	};
@@ -233,6 +260,8 @@ const mapDbLiveMarket = (market: PolymarketDbLiveMarket): PolymarketMarket => {
 		liquidityUsd: null,
 		volumeUsd: null,
 		dailyRewardsUsd: null,
+		endDateIso: market.endDate,
+		updatedAtIso: market.lastSeenAt,
 		isLive: true,
 		isResolved: false
 	};

@@ -1,7 +1,8 @@
 <script lang="ts">
-	import type { SignalRow } from '$lib/mock/markets';
+	import type { SignalRow } from '$lib/types/views';
 
 	export let rows: SignalRow[] = [];
+	export let showUnavailable = false;
 
 	const confidenceClass: Record<SignalRow['confidence'], string> = {
 		HIGH: 'border-terminalGreen/50 bg-terminalGreen/10 text-terminalGreen',
@@ -26,23 +27,29 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each rows as row}
-				<tr class="border-b border-border/60 hover:bg-panelAlt/70">
-					<td class="px-2 py-1 text-textPrimary">{row.signal}</td>
-					<td class="max-w-60 truncate px-2 py-1 text-textSecondary">{row.market}</td>
-					<td class="px-2 py-1">{row.venue}</td>
-					<td class={`px-2 py-1 ${row.side === 'YES' ? 'text-terminalGreen' : 'text-danger'}`}>{row.side}</td>
-					<td class="px-2 py-1 text-right tabular-nums text-textPrimary">{row.price}</td>
-					<td class="px-2 py-1 text-right tabular-nums">{row.fair}</td>
-					<td class="px-2 py-1 text-right tabular-nums text-terminalGreen">{row.edge}</td>
-					<td class="px-2 py-1 text-right tabular-nums">{row.liquidity}</td>
-					<td class="px-2 py-1">
-						<span class={`inline-flex rounded-sm border px-1.5 py-0.5 text-[10px] ${confidenceClass[row.confidence]}`}>
-							{row.confidence}
-						</span>
-					</td>
+			{#if rows.length === 0 && showUnavailable}
+				<tr>
+					<td colspan="9" class="px-3 py-6 text-center text-xs text-textMuted">⚠️ No market data</td>
 				</tr>
-			{/each}
+			{:else}
+				{#each rows as row}
+					<tr class="border-b border-border/60 hover:bg-panelAlt/70">
+						<td class="px-2 py-1 text-textPrimary">{row.signal}</td>
+						<td class="max-w-60 truncate px-2 py-1 text-textSecondary">{row.market}</td>
+						<td class="px-2 py-1">{row.venue}</td>
+						<td class={`px-2 py-1 ${row.side === 'YES' ? 'text-terminalGreen' : 'text-danger'}`}>{row.side}</td>
+						<td class="px-2 py-1 text-right tabular-nums text-textPrimary">{row.price}</td>
+						<td class="px-2 py-1 text-right tabular-nums">{row.fair}</td>
+						<td class="px-2 py-1 text-right tabular-nums text-terminalGreen">{row.edge}</td>
+						<td class="px-2 py-1 text-right tabular-nums">{row.liquidity}</td>
+						<td class="px-2 py-1">
+							<span class={`inline-flex rounded-sm border px-1.5 py-0.5 text-[10px] ${confidenceClass[row.confidence]}`}>
+								{row.confidence}
+							</span>
+						</td>
+					</tr>
+				{/each}
+			{/if}
 		</tbody>
 	</table>
 </div>

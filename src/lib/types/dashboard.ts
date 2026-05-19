@@ -1,4 +1,6 @@
-import type { SignalRow, Stat } from '$lib/mock/markets';
+import type { SignalRow, Stat } from './views';
+
+export type { Confidence, SignalRow, Stat } from './views';
 
 export type FeedMode = 'LIVE' | 'PARTIAL' | 'STATIC';
 

@@ -17,6 +17,8 @@ export type KalshiMarket = {
 	liquidityUsd: number | null;
 	volumeUsd: number | null;
 	dailyRewardsUsd: number | null;
+	closeTimeIso: string | null;
+	updatedTimeIso: string | null;
 	isLive: boolean | null;
 	isResolved: boolean | null;
 };
@@ -255,6 +257,11 @@ const toKalshiMarket = (raw: unknown): KalshiMarket | null => {
 		liquidityUsd,
 		volumeUsd,
 		dailyRewardsUsd: null,
+		closeTimeIso:
+			toStringValue(record.close_time) ??
+			toStringValue(record.latest_expiration_time) ??
+			toStringValue(record.expiration_time),
+		updatedTimeIso: toStringValue(record.updated_time) ?? toStringValue(record.created_time),
 		isLive,
 		isResolved
 	};

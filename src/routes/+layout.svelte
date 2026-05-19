@@ -6,8 +6,18 @@
 
 	const marketData = setMarketDataContext();
 
+	const MARKET_DATA_REFRESH_MS = 3 * 60 * 1000;
+
 	onMount(() => {
 		void marketData.refresh();
+
+		const intervalId = setInterval(() => {
+			void marketData.refresh({ background: true });
+		}, MARKET_DATA_REFRESH_MS);
+
+		return () => {
+			clearInterval(intervalId);
+		};
 	});
 </script>
 

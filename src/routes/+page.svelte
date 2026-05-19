@@ -1,6 +1,7 @@
 <script lang="ts">
 	import CommandBar from '$lib/components/CommandBar.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import MarketDataErrorBanner from '$lib/components/MarketDataErrorBanner.svelte';
 	import MarketFeed from '$lib/components/MarketFeed.svelte';
 	import Panel from '$lib/components/Panel.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
@@ -8,12 +9,12 @@
 	import StatCard from '$lib/components/StatCard.svelte';
 	import {
 		buildDashboardFromMarketSnapshot,
-		fallbackMarketDataSnapshot,
-		getMarketDataContext
+		getMarketDataContext,
+		initialMarketDataSnapshot
 	} from '$lib/context/marketData';
 	import type { DashboardApiResponse } from '$lib/types/dashboard';
 	const marketData = getMarketDataContext();
-	let data: DashboardApiResponse = buildDashboardFromMarketSnapshot(fallbackMarketDataSnapshot);
+	let data: DashboardApiResponse = buildDashboardFromMarketSnapshot(initialMarketDataSnapshot);
 
 	$: data = buildDashboardFromMarketSnapshot($marketData);
 </script>
@@ -24,6 +25,7 @@
 
 <div class="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-bg text-textPrimary">
 	<Header timestamp={data.dashboardTimestamp} feedMode={data.feedMode} />
+	<MarketDataErrorBanner message={$marketData.error} />
 
 	<div class="grid min-h-0 flex-1 grid-cols-[136px_1fr] overflow-hidden">
 		<div class="min-h-0 overflow-y-auto pb-[calc(7rem+env(safe-area-inset-bottom,0px))]">
@@ -41,7 +43,7 @@
 					</Panel>
 
 					<Panel title="Signal Scanner" subtitle={`${data.signalRows.length} opportunities`}>
-						<SignalTable rows={data.signalRows} />
+						<SignalTable rows={data.signalRows} showUnavailable={!!$marketData.error} />
 					</Panel>
 
 					<div class="grid gap-3 lg:grid-cols-3">

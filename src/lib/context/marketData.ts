@@ -1,14 +1,7 @@
 import { getContext, setContext } from 'svelte';
 import { writable } from 'svelte/store';
 
-import {
-	commandPrompts,
-	dashboardTimestamp,
-	marketFeed as fallbackMarketFeed,
-	mockMarkets,
-	navItems,
-	probabilityDrift as fallbackProbabilityDrift
-} from '$lib/mock/markets';
+import { commandPrompts, navItems } from '$lib/constants/terminal';
 import type { DashboardApiResponse } from '$lib/types/dashboard';
 import type { MarketRow, MarketsApiResponse, Venue } from '$lib/types/markets';
 
@@ -23,14 +16,20 @@ export type MarketDataSnapshot = {
 	venueLoadState: Record<Venue, VenueLoadState>;
 };
 
+export type MarketDataRefreshOptions = {
+	background?: boolean;
+};
+
 export type MarketDataContext = {
 	subscribe: ReturnType<typeof writable<MarketDataSnapshot>>['subscribe'];
-	refresh: () => Promise<void>;
+	refresh: (options?: MarketDataRefreshOptions) => Promise<void>;
 };
 
 export const venueOrder: Venue[] = ['Alpha', 'Polymarket', 'Kalshi', 'Limitless'];
 
 const MARKET_DATA_CONTEXT_KEY = Symbol('market-data-context');
+
+const UNAVAILABLE = '⚠️';
 
 const baseVenueLoadState: Record<Venue, VenueLoadState> = {
 	Alpha: 'loading',
@@ -46,26 +45,24 @@ const venueSlugMap: Record<Venue, VenueStatusSlug> = {
 	Limitless: 'limitless'
 };
 
-export const fallbackMarketsData: MarketsApiResponse = {
-	dashboardTimestamp,
+export const emptyMarketsData: MarketsApiResponse = {
+	dashboardTimestamp: '—',
 	feedMode: 'STATIC',
-	venues: ['Alpha'],
-	activeVenueCount: 1,
-	marketsIndexed: mockMarkets.length,
-	markets: mockMarkets
+	venues: [],
+	activeVenueCount: 0,
+	marketsIndexed: 0,
+	markets: []
 };
 
-export const fallbackMarketDataSnapshot: MarketDataSnapshot = {
-	data: fallbackMarketsData,
-	isLoading: false,
+export const initialMarketDataSnapshot: MarketDataSnapshot = {
+	data: emptyMarketsData,
+	isLoading: true,
 	error: null,
-	venueLoadState: {
-		Alpha: 'ready',
-		Polymarket: 'error',
-		Kalshi: 'error',
-		Limitless: 'error'
-	}
+	venueLoadState: { ...baseVenueLoadState }
 };
+
+const valueOrUnavailable = (snapshot: MarketDataSnapshot, value: string): string =>
+	snapshot.error ? UNAVAILABLE : value;
 
 const formatMoney = (value: number): string =>
 	`$${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.max(0, value))}`;
@@ -143,32 +140,34 @@ const deriveVenueStatus = (
 export const buildDashboardFromMarketSnapshot = (
 	snapshot: MarketDataSnapshot
 ): DashboardApiResponse => {
-	const { data, isLoading, venueLoadState } = snapshot;
+	const { data, isLoading, venueLoadState, error } = snapshot;
 	const spreadValues = data.markets.map((market) => market.spread).filter((spread) => spread > 0);
 	const avgSpread =
 		spreadValues.length > 0
 			? spreadValues.reduce((acc, spread) => acc + spread, 0) / spreadValues.length
 			: null;
 
-	const signalRows = data.markets
-		.filter((market) => !market.signals.includes('NONE'))
-		.map((market) => {
-			const fair = Math.max(0, Math.min(1, 1 - market.noPrice));
-			const edge = Math.max(market.spread / 100, Math.abs(fair - market.yesPrice));
-			return {
-				signal: signalLabel(market),
-				market: market.name,
-				venue: market.venue,
-				side: (fair >= market.yesPrice ? 'YES' : 'NO') as 'YES' | 'NO',
-				price: market.yesPrice.toFixed(2),
-				fair: fair.toFixed(2),
-				edge: `+${(edge * 100).toFixed(1)}%`,
-				liquidity: formatMoney(market.liquidity),
-				confidence: confidenceForLiquidity(market.liquidity)
-			};
-		})
-		.sort((a, b) => Number.parseFloat(b.edge) - Number.parseFloat(a.edge))
-		.slice(0, 12);
+	const signalRows = error
+		? []
+		: data.markets
+				.filter((market) => !market.signals.includes('NONE'))
+				.map((market) => {
+					const fair = Math.max(0, Math.min(1, 1 - market.noPrice));
+					const edge = Math.max(market.spread / 100, Math.abs(fair - market.yesPrice));
+					return {
+						signal: signalLabel(market),
+						market: market.name,
+						venue: market.venue,
+						side: (fair >= market.yesPrice ? 'YES' : 'NO') as 'YES' | 'NO',
+						price: market.yesPrice.toFixed(2),
+						fair: fair.toFixed(2),
+						edge: `+${(edge * 100).toFixed(1)}%`,
+						liquidity: formatMoney(market.liquidity),
+						confidence: confidenceForLiquidity(market.liquidity)
+					};
+				})
+				.sort((a, b) => Number.parseFloat(b.edge) - Number.parseFloat(a.edge))
+				.slice(0, 12);
 
 	const estimatedEdge = signalRows.reduce((acc, row) => {
 		const edgePct = Number.parseFloat(row.edge.replace('%', '')) / 100;
@@ -177,10 +176,13 @@ export const buildDashboardFromMarketSnapshot = (
 		return acc + edgePct * liquidity;
 	}, 0);
 
-	const marketFeed =
-		signalRows.length > 0
-			? signalRows.slice(0, 5).map((row) => `${row.venue}: ${row.signal.toLowerCase()} ${row.edge} on ${row.market}`)
-			: fallbackMarketFeed;
+	const marketFeed = error
+		? ['⚠️ Market data unavailable']
+		: signalRows.length > 0
+			? signalRows
+					.slice(0, 5)
+					.map((row) => `${row.venue}: ${row.signal.toLowerCase()} ${row.edge} on ${row.market}`)
+			: [];
 
 	const venueHealth = venueOrder.map((venue) => {
 		const venueMarkets = data.markets.filter((market) => market.venue === venue);
@@ -190,44 +192,76 @@ export const buildDashboardFromMarketSnapshot = (
 		return {
 			venue,
 			status: deriveVenueStatus(venue, data.markets, data.venues, venueLoadState, data.feedMode),
-			marketsIndexed: String(venueMarkets.length),
-			lastSync: venueMarkets.length > 0 ? (isLoading ? 'syncing' : 'just now') : 'n/a',
-			apiMode:
-				venueLoadState[venue] === 'ready'
+			marketsIndexed: error ? UNAVAILABLE : String(venueMarkets.length),
+			lastSync: error
+				? UNAVAILABLE
+				: venueMarkets.length > 0
+					? isLoading
+						? 'syncing'
+						: 'just now'
+					: 'n/a',
+			apiMode: error
+				? UNAVAILABLE
+				: venueLoadState[venue] === 'ready'
 					? 'API'
 					: venueLoadState[venue] === 'loading'
 						? 'Pending'
 						: data.feedMode === 'STATIC'
 							? 'Mock'
 							: 'Unavailable',
-			liquidityScore: `${liquidityScore}/100`,
-			volumeSignal: volumePool > 100_000 ? 'High' : volumePool > 0 ? 'Tracked' : 'Low'
+			liquidityScore: error ? UNAVAILABLE : `${liquidityScore}/100`,
+			volumeSignal: error
+				? UNAVAILABLE
+				: volumePool > 100_000
+					? 'High'
+					: volumePool > 0
+						? 'Tracked'
+						: 'Low'
 		};
 	});
 
-	const driftCandidate = signalRows[0];
-	const probabilityDrift = driftCandidate
-		? {
-				market: driftCandidate.market,
-				start: driftCandidate.fair,
-				end: driftCandidate.price,
-				sparkline: '▂▃▄▅▃▆▇',
-				oneHour: driftCandidate.edge,
-				twentyFourHour: driftCandidate.edge,
-				spread: avgSpread !== null ? formatPercent(avgSpread) : 'n/a'
-			}
-		: fallbackProbabilityDrift;
+	// Historical probability drift is not available yet — no synthesized placeholders.
+	const probabilityDrift = {
+		market: UNAVAILABLE,
+		start: UNAVAILABLE,
+		end: UNAVAILABLE,
+		sparkline: UNAVAILABLE,
+		oneHour: UNAVAILABLE,
+		twentyFourHour: UNAVAILABLE,
+		spread: UNAVAILABLE
+	};
 
 	return {
 		dashboardTimestamp: data.dashboardTimestamp,
 		navItems,
 		stats: [
-			{ label: 'Total Markets', value: String(data.marketsIndexed) },
-			{ label: 'Active Venues', value: String(data.activeVenueCount) },
-			{ label: 'Avg Spread', value: avgSpread !== null ? formatPercent(avgSpread) : 'n/a' },
-			{ label: 'Open Signal Count', value: String(signalRows.length) },
-			{ label: 'Reward Eligible', value: String(data.markets.filter((market) => market.reward).length) },
-			{ label: 'Estimated Edge', value: formatMoney(estimatedEdge) }
+			{
+				label: 'Total Markets',
+				value: valueOrUnavailable(snapshot, String(data.marketsIndexed))
+			},
+			{
+				label: 'Active Venues',
+				value: valueOrUnavailable(snapshot, String(data.activeVenueCount))
+			},
+			{
+				label: 'Avg Spread',
+				value: error ? UNAVAILABLE : avgSpread !== null ? formatPercent(avgSpread) : 'n/a'
+			},
+			{
+				label: 'Open Signal Count',
+				value: valueOrUnavailable(snapshot, String(signalRows.length))
+			},
+			{
+				label: 'Reward Eligible',
+				value: valueOrUnavailable(
+					snapshot,
+					String(data.markets.filter((market) => market.reward).length)
+				)
+			},
+			{
+				label: 'Estimated Edge',
+				value: error ? UNAVAILABLE : formatMoney(estimatedEdge)
+			}
 		],
 		signalRows,
 		marketFeed,
@@ -240,37 +274,47 @@ export const buildDashboardFromMarketSnapshot = (
 
 const createMarketDataContext = (): MarketDataContext => {
 	const state = writable<MarketDataSnapshot>({
-		data: fallbackMarketsData,
+		data: emptyMarketsData,
 		isLoading: true,
 		error: null,
 		venueLoadState: { ...baseVenueLoadState }
 	});
 
-	const refresh = async (): Promise<void> => {
-		const baseUrl = readApiBaseUrl();
-		if (!baseUrl) {
-			state.set({
-				data: fallbackMarketsData,
-				isLoading: false,
-				error: 'PUBLIC_API_BASE_URL is missing.',
-				venueLoadState: {
-					Alpha: 'error',
-					Polymarket: 'error',
-					Kalshi: 'error',
-					Limitless: 'error'
-				}
-			});
-			return;
-		}
+	let refreshInFlight = false;
 
-		state.update((current) => ({
-			...current,
-			isLoading: true,
-			error: null,
-			venueLoadState: { ...baseVenueLoadState }
-		}));
+	const refresh = async (options?: MarketDataRefreshOptions): Promise<void> => {
+		if (refreshInFlight) return;
+		refreshInFlight = true;
+
+		const background = options?.background === true;
 
 		try {
+			const baseUrl = readApiBaseUrl();
+			if (!baseUrl) {
+				if (background) return;
+				state.set({
+					data: emptyMarketsData,
+					isLoading: false,
+					error: 'PUBLIC_API_BASE_URL is missing.',
+					venueLoadState: {
+						Alpha: 'error',
+						Polymarket: 'error',
+						Kalshi: 'error',
+						Limitless: 'error'
+					}
+				});
+				return;
+			}
+
+			if (!background) {
+				state.update((current) => ({
+					...current,
+					isLoading: true,
+					error: null,
+					venueLoadState: { ...baseVenueLoadState }
+				}));
+			}
+
 			const [venueStates, marketsResponse] = await Promise.all([
 				Promise.all(venueOrder.map(async (venue) => [venue, await loadVenueState(baseUrl, venue)] as const)),
 				withTimeout(fetch(`${baseUrl}/api/markets`), 12_000)
@@ -281,8 +325,9 @@ const createMarketDataContext = (): MarketDataContext => {
 			);
 
 			if (!marketsResponse.ok) {
+				if (background) return;
 				state.set({
-					data: fallbackMarketsData,
+					data: emptyMarketsData,
 					isLoading: false,
 					error: `Markets API returned ${marketsResponse.status}.`,
 					venueLoadState
@@ -297,15 +342,16 @@ const createMarketDataContext = (): MarketDataContext => {
 				if (hasVenue) venueLoadState[venue] = 'ready';
 			}
 
-			state.set({
+			state.update((current) => ({
 				data: payload,
 				isLoading: false,
 				error: null,
 				venueLoadState
-			});
+			}));
 		} catch {
+			if (background) return;
 			state.set({
-				data: fallbackMarketsData,
+				data: emptyMarketsData,
 				isLoading: false,
 				error: 'Failed to load market data.',
 				venueLoadState: {
@@ -315,6 +361,8 @@ const createMarketDataContext = (): MarketDataContext => {
 					Limitless: 'error'
 				}
 			});
+		} finally {
+			refreshInFlight = false;
 		}
 	};
 

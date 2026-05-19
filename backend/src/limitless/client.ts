@@ -18,6 +18,7 @@ export type LimitlessMarket = {
 	isLive: boolean | null;
 	isResolved: boolean | null;
 	expiryLabel: string;
+	updatedAtIso: string | null;
 	categories: string[];
 	assetType: string | null;
 };
@@ -125,6 +126,19 @@ const isBinaryCompatible = (record: Record<string, unknown>): boolean => {
 	return yesPrice !== null && noPrice !== null;
 };
 
+const toIsoTimestamp = (value: unknown): string | null => {
+	if (typeof value === 'string') {
+		const trimmed = value.trim();
+		if (!trimmed) return null;
+		const parsed = Date.parse(trimmed);
+		return Number.isFinite(parsed) ? new Date(parsed).toISOString() : trimmed;
+	}
+	const numberValue = toNumberValue(value);
+	if (numberValue === null || numberValue <= 0) return null;
+	const ms = numberValue > 1_000_000_000_000 ? numberValue : numberValue * 1000;
+	return new Date(ms).toISOString();
+};
+
 const formatExpiryLabel = (record: Record<string, unknown>): string => {
 	const expirationTimestamp = toNumberValue(record.expirationTimestamp);
 	if (expirationTimestamp !== null && expirationTimestamp > 0) {
@@ -212,6 +226,11 @@ const toLimitlessMarket = (raw: unknown): LimitlessMarket | null => {
 		isLive,
 		isResolved,
 		expiryLabel: formatExpiryLabel(record),
+		updatedAtIso:
+			toIsoTimestamp(record.updatedAt) ??
+			toIsoTimestamp(record.updated_at) ??
+			toIsoTimestamp(record.createdAt) ??
+			toIsoTimestamp(record.created_at),
 		categories: extractStringArray(record.categories),
 		assetType: resolveAssetType(record)
 	};

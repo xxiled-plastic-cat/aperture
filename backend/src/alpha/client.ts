@@ -51,10 +51,21 @@ const normalizeMoney = (value: unknown): number | null => {
 	return value;
 };
 
+const toUpdatedAtIso = (market: Market): string | null => {
+	if (typeof market.lastRewardTs === 'number' && market.lastRewardTs > 0) {
+		return new Date(market.lastRewardTs * 1000).toISOString();
+	}
+	return null;
+};
+
 const mapMarket = (market: Market): AlphaMarket => {
 	const rewardRaw =
 		(typeof market.totalRewards === 'number' ? market.totalRewards : null) ??
 		(typeof market.totalPregameRewards === 'number' ? market.totalPregameRewards : null);
+	const volumeUsd = normalizeMoney(market.volume);
+	const liquidityRaw = (market as Record<string, unknown>).liquidity;
+	const liquidityUsd =
+		typeof liquidityRaw === 'number' ? normalizeMoney(liquidityRaw) : null;
 	return {
 		marketAppId: market.marketAppId,
 		id: String(market.id ?? market.marketAppId),
@@ -62,8 +73,11 @@ const mapMarket = (market: Market): AlphaMarket => {
 		title: market.title ?? market.slug ?? String(market.marketAppId),
 		yesPrice: normalizeProbability(market.yesProb),
 		noPrice: normalizeProbability(market.noProb),
-		liquidityUsd: normalizeMoney(market.volume),
+		volumeUsd,
+		liquidityUsd,
 		dailyRewardsUsd: rewardRaw !== null ? rewardRaw / 1_000_000 : null,
+		endTs: typeof market.endTs === 'number' && market.endTs > 0 ? market.endTs : null,
+		updatedAtIso: toUpdatedAtIso(market),
 		isLive: typeof market.isLive === 'boolean' ? market.isLive : null,
 		isResolved: typeof market.isResolved === 'boolean' ? market.isResolved : null
 	};
@@ -78,8 +92,11 @@ const mapDbLiveMarket = (market: AlphaDbLiveMarket): AlphaMarket => {
 		title: slug,
 		yesPrice: null,
 		noPrice: null,
+		volumeUsd: null,
 		liquidityUsd: null,
 		dailyRewardsUsd: null,
+		endTs: market.endTs,
+		updatedAtIso: market.lastSeenAt ?? market.closeTime,
 		isLive: true,
 		isResolved: false
 	};

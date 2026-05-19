@@ -1,9 +1,10 @@
 <script lang="ts">
 	import CommandBar from '$lib/components/CommandBar.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import MarketDataErrorBanner from '$lib/components/MarketDataErrorBanner.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
-	import { fallbackMarketsData, getMarketDataContext, venueOrder } from '$lib/context/marketData';
-	import { navItems } from '$lib/mock/markets';
+	import { navItems } from '$lib/constants/terminal';
+	import { emptyMarketsData, getMarketDataContext, venueOrder } from '$lib/context/marketData';
 	import type { MarketRow, MarketSignal, MarketsApiResponse, Venue } from '$lib/types/markets';
 
 	type ChipFilter =
@@ -63,16 +64,14 @@
 	};
 
 	const marketData = getMarketDataContext();
-	let data: MarketsApiResponse = fallbackMarketsData;
-
-	const defaultMarket = fallbackMarketsData.markets[0]!;
+	let data: MarketsApiResponse = emptyMarketsData;
 
 	let activeChip: ChipFilter = 'All';
 	let activeVenue: VenueFilter = 'All';
-	let selectedMarketId = defaultMarket.id;
+	let selectedMarketId = '';
 	let sortColumn: SortColumn | null = null;
 	let sortDirection: SortDirection = 'desc';
-	let displayMarkets: MarketRow[] = fallbackMarketsData.markets;
+	let displayMarkets: MarketRow[] = [];
 	let isMarketsLoading = true;
 	let venueLoadState: Record<Venue, VenueLoadState> = {
 		Alpha: 'loading',
@@ -173,6 +172,7 @@
 
 	$: data = $marketData.data;
 	$: isMarketsLoading = $marketData.isLoading;
+	$: marketDataError = $marketData.error;
 	$: venueLoadState = $marketData.venueLoadState;
 
 	$: venueFilters = venueOrder.filter(
@@ -202,11 +202,7 @@
 	}
 
 	$: selectedMarket =
-		displayMarkets.find((market) => market.id === selectedMarketId) ?? displayMarkets[0] ?? defaultMarket;
-
-	$: driftStart = Math.max(0.05, selectedMarket.yesPrice - 0.09).toFixed(2);
-	$: driftOneHour = `+${Math.max(0.4, selectedMarket.spread * 0.5).toFixed(1)}%`;
-	$: driftTwentyFourHour = `+${Math.max(1.2, selectedMarket.spread * 1.6).toFixed(1)}%`;
+		displayMarkets.find((market) => market.id === selectedMarketId) ?? displayMarkets[0] ?? null;
 
 	const selectMarket = (market: MarketRow) => {
 		selectedMarketId = market.id;
@@ -237,6 +233,7 @@
 
 <div class="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-bg text-textPrimary">
 	<Header timestamp={data.dashboardTimestamp} feedMode={data.feedMode} />
+	<MarketDataErrorBanner message={marketDataError} />
 
 	<div class="grid min-h-0 flex-1 grid-cols-[136px_1fr] overflow-hidden">
 		<div class="min-h-0 overflow-y-auto pb-[calc(7rem+env(safe-area-inset-bottom,0px))]">
@@ -250,7 +247,7 @@
 						<div>
 							<h1 class="font-mono text-sm uppercase tracking-[0.18em] text-textPrimary">MARKETS</h1>
 							<p class="mt-1 font-mono text-[11px] text-textSecondary">
-								{data.marketsIndexed} indexed markets / {data.activeVenueCount} active venues / {data.feedMode.toLowerCase()} multi-venue feed
+								{marketDataError ? '⚠️' : data.marketsIndexed} indexed markets / {marketDataError ? '⚠️' : data.activeVenueCount} active venues / {data.feedMode.toLowerCase()} multi-venue feed
 							</p>
 						</div>
 						<div class="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide">
@@ -359,14 +356,18 @@
 									{#if displayMarkets.length === 0}
 										<tr>
 											<td colspan="12" class="px-3 py-6 text-center font-mono text-xs text-textMuted">
-												NO MARKETS MATCH CURRENT FILTER
+												{#if marketDataError || data.markets.length === 0}
+													⚠️ NO MARKET DATA AVAILABLE
+												{:else}
+													NO MARKETS MATCH CURRENT FILTER
+												{/if}
 											</td>
 										</tr>
 									{:else}
 										{#each displayMarkets as market (market.id)}
 											<tr
 												class={`border-b border-border/80 transition-colors ${
-													market.id === selectedMarket.id
+													selectedMarket && market.id === selectedMarket.id
 														? 'bg-terminalGreen/10 text-textPrimary shadow-[inset_2px_0_0_0_rgba(127,219,127,0.8)]'
 														: 'text-textSecondary hover:bg-panelAlt/80 hover:text-textPrimary'
 												}`}
@@ -416,6 +417,7 @@
 							<h2 class="text-[11px] uppercase tracking-[0.12em] text-textPrimary">MARKET INSPECTOR</h2>
 						</div>
 
+						{#if selectedMarket}
 						<div class="space-y-1">
 							<p class="text-xs text-textPrimary">{selectedMarket.name}</p>
 							<div class="grid grid-cols-2 gap-x-3 gap-y-1">
@@ -442,25 +444,9 @@
 
 						<div class="space-y-1 border-t border-border pt-2 opacity-50">
 							<p class="text-[10px] uppercase tracking-wide text-textMuted">Probability drift</p>
-							<p class="rounded-sm border border-border bg-panelAlt px-2 py-1.5 text-center text-xs tabular-nums">
-								<span class="text-textSecondary">{driftStart}</span>
-								<span class="mx-2 text-signalCyan">▂▃▄▅▃▆▇</span>
-								<span class="text-terminalGreen">{formatPrice(selectedMarket.yesPrice)}</span>
+							<p class="rounded-sm border border-border bg-panelAlt px-2 py-1.5 text-center text-xs tabular-nums text-textMuted">
+								⚠️ Historical data not available
 							</p>
-							<div class="grid grid-cols-3 gap-1 text-center">
-								<div class="rounded-sm border border-border bg-panelAlt px-1 py-1">
-									<p class="text-[10px] text-textMuted">1h</p>
-									<p class="tabular-nums text-terminalGreen">{driftOneHour}</p>
-								</div>
-								<div class="rounded-sm border border-border bg-panelAlt px-1 py-1">
-									<p class="text-[10px] text-textMuted">24h</p>
-									<p class="tabular-nums text-terminalGreen">{driftTwentyFourHour}</p>
-								</div>
-								<div class="rounded-sm border border-border bg-panelAlt px-1 py-1">
-									<p class="text-[10px] text-textMuted">Spread</p>
-									<p class="tabular-nums text-amber">{formatSpread(selectedMarket.spread)}</p>
-								</div>
-							</div>
 						</div>
 
 						<div class="space-y-1 border-t border-border pt-2 opacity-50">
@@ -477,6 +463,13 @@
 							</div>
 							<p class="text-[10px] text-textMuted">Cross-venue matching is not enabled in scanner-only mode.</p>
 						</div>
+						{:else}
+							<p class="py-8 text-center text-xs text-textMuted">
+								{marketDataError || data.markets.length === 0
+									? '⚠️ No market data'
+									: '⚠️ Select a market'}
+							</p>
+						{/if}
 					</aside>
 				</section>
 			</div>

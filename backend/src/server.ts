@@ -9,7 +9,6 @@ import { loadKalshiApiSnapshot } from './kalshi/client';
 import { loadLimitlessApiSnapshot } from './limitless/client';
 import { loadPolymarketApiSnapshot } from './polymarket/client';
 import { loadPolymarketDbSnapshot } from './polymarket/db';
-import { buildDashboardResponse } from './services/dashboard';
 import { buildMarketsResponse } from './services/markets';
 
 const app = express();
@@ -20,23 +19,21 @@ app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
 
 app.get('/api/health', async (_req, res) => {
-	const dashboard = await buildDashboardResponse();
-	res.json({
-		ok: true,
-		service: 'aperture-backend',
-		meta: dashboard.meta,
-		feedMode: dashboard.feedMode
-	});
-});
-
-app.get('/api/dashboard', async (_req, res) => {
 	try {
-		const dashboard = await buildDashboardResponse();
-		res.json(dashboard);
+		const markets = await buildMarketsResponse();
+		res.json({
+			ok: true,
+			service: 'aperture-backend',
+			feedMode: markets.feedMode,
+			marketsIndexed: markets.marketsIndexed,
+			activeVenueCount: markets.activeVenueCount,
+			meta: markets.meta
+		});
 	} catch (error) {
 		res.status(500).json({
 			ok: false,
-			error: error instanceof Error ? error.message : 'Unknown dashboard error'
+			service: 'aperture-backend',
+			error: error instanceof Error ? error.message : 'Unknown health error'
 		});
 	}
 });

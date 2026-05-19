@@ -5,6 +5,12 @@ import { loadLimitlessApiSnapshot, type LimitlessMarket } from '../limitless/cli
 import { loadPolymarketDbSnapshot } from '../polymarket/db';
 import { loadPolymarketApiSnapshot, type PolymarketMarket } from '../polymarket/client';
 import type { AlphaMarket, MarketCategory, MarketRow, MarketSignal, MarketsApiResponse, Venue } from '../types';
+import {
+	formatExpiryLabelFromIso,
+	formatExpiryLabelFromUnixSeconds,
+	formatUpdatedLabel,
+	roundUsd
+} from './marketRowFormat';
 
 const formatUtcTimestamp = (date: Date): string =>
 	date.toISOString().replace('T', ' ').replace('Z', ' UTC');
@@ -77,150 +83,168 @@ const toSignals = (
 	return signals;
 };
 
-const mapCommonRow = ({
-	id,
-	name,
-	venue,
-	category,
-	yesPrice,
-	noPrice,
-	liquidityUsd,
-	dailyRewardsUsd,
-	isResolved
-}: {
+type RowFieldInput = {
 	id: string;
 	name: string;
 	venue: Venue;
 	category?: MarketCategory;
 	yesPrice: number | null;
 	noPrice: number | null;
+	volumeUsd: number | null;
 	liquidityUsd: number | null;
 	dailyRewardsUsd: number | null;
 	isResolved: boolean | null;
-}): MarketRow => {
-	const hasTwoSidedPrices = yesPrice !== null && noPrice !== null;
-	const safeYes = yesPrice ?? 0.5;
-	const safeNo = noPrice ?? Math.max(0, 1 - safeYes);
+	expiryLabel: string;
+	updatedAtIso: string | null;
+};
+
+const mapCommonRow = (input: RowFieldInput, fetchedAtIso: string): MarketRow => {
+	const hasTwoSidedPrices = input.yesPrice !== null && input.noPrice !== null;
+	const safeYes = input.yesPrice ?? 0.5;
+	const safeNo = input.noPrice ?? Math.max(0, 1 - safeYes);
 	const spread = Math.max(0, Math.abs(1 - safeYes - safeNo) * 100);
-	const reward = (dailyRewardsUsd ?? 0) > 0;
+	const reward = (input.dailyRewardsUsd ?? 0) > 0;
 	const signals = toSignals(
 		{
-			dailyRewardsUsd,
-			liquidityUsd,
-			isResolved,
+			dailyRewardsUsd: input.dailyRewardsUsd,
+			liquidityUsd: input.liquidityUsd,
+			isResolved: input.isResolved,
 			yesPrice: safeYes,
 			noPrice: safeNo
 		},
 		spread,
 		hasTwoSidedPrices
 	);
+
 	return {
-		id,
-		name,
-		venue,
-		category: category ?? categoryFromTitle(name),
+		id: input.id,
+		name: input.name,
+		venue: input.venue,
+		category: input.category ?? categoryFromTitle(input.name),
 		yesPrice: Number(safeYes.toFixed(2)),
 		noPrice: Number(safeNo.toFixed(2)),
 		spread: Number(spread.toFixed(1)),
-		volume: Math.max(0, Math.round(liquidityUsd ?? 0)),
-		liquidity: Math.max(0, Math.round((liquidityUsd ?? 0) * 0.2)),
+		volume: roundUsd(input.volumeUsd),
+		liquidity: roundUsd(input.liquidityUsd),
 		reward,
-		expiry: reward ? '14d' : '30d',
+		expiry: input.expiryLabel,
 		signals,
-		updated: 'just now'
+		updated: formatUpdatedLabel(input.updatedAtIso, fetchedAtIso)
 	};
 };
 
-const toAlphaMarketRow = (market: AlphaMarket): MarketRow => {
-	return mapCommonRow({
-		id: market.id,
-		name: market.title,
-		venue: 'Alpha',
-		yesPrice: market.yesPrice,
-		noPrice: market.noPrice,
-		liquidityUsd: market.liquidityUsd,
-		dailyRewardsUsd: market.dailyRewardsUsd,
-		isResolved: market.isResolved
-	});
+const alphaExpiryLabel = (market: AlphaMarket): string => {
+	const fromEndTs = formatExpiryLabelFromUnixSeconds(market.endTs);
+	return fromEndTs !== 'n/a' ? fromEndTs : 'n/a';
 };
 
-const toPolymarketRow = (market: PolymarketMarket): MarketRow => {
-	return mapCommonRow({
-		id: market.id,
-		name: market.title,
-		venue: 'Polymarket',
-		yesPrice: market.yesPrice,
-		noPrice: market.noPrice,
-		liquidityUsd: market.liquidityUsd ?? market.volumeUsd ?? null,
-		dailyRewardsUsd: market.dailyRewardsUsd,
-		isResolved: market.isResolved
-	});
-};
+const toAlphaMarketRow = (market: AlphaMarket, fetchedAtIso: string): MarketRow =>
+	mapCommonRow(
+		{
+			id: market.id,
+			name: market.title,
+			venue: 'Alpha',
+			yesPrice: market.yesPrice,
+			noPrice: market.noPrice,
+			volumeUsd: market.volumeUsd,
+			liquidityUsd: market.liquidityUsd,
+			dailyRewardsUsd: market.dailyRewardsUsd,
+			isResolved: market.isResolved,
+			expiryLabel: alphaExpiryLabel(market),
+			updatedAtIso: market.updatedAtIso
+		},
+		fetchedAtIso
+	);
 
-const toKalshiRow = (market: KalshiMarket): MarketRow => {
-	return mapCommonRow({
-		id: market.id,
-		name: market.title,
-		venue: 'Kalshi',
-		yesPrice: market.yesPrice,
-		noPrice: market.noPrice,
-		liquidityUsd: market.liquidityUsd ?? market.volumeUsd,
-		dailyRewardsUsd: market.dailyRewardsUsd,
-		isResolved: market.isResolved
-	});
-};
+const toPolymarketRow = (market: PolymarketMarket, fetchedAtIso: string): MarketRow =>
+	mapCommonRow(
+		{
+			id: market.id,
+			name: market.title,
+			venue: 'Polymarket',
+			yesPrice: market.yesPrice,
+			noPrice: market.noPrice,
+			volumeUsd: market.volumeUsd,
+			liquidityUsd: market.liquidityUsd,
+			dailyRewardsUsd: market.dailyRewardsUsd,
+			isResolved: market.isResolved,
+			expiryLabel: formatExpiryLabelFromIso(market.endDateIso),
+			updatedAtIso: market.updatedAtIso
+		},
+		fetchedAtIso
+	);
 
-const toLimitlessRow = (market: LimitlessMarket): MarketRow => {
-	const row = mapCommonRow({
-		id: market.slug,
-		name: market.title,
-		venue: 'Limitless',
-		category: categoryFromLimitless(market),
-		yesPrice: market.yesPrice,
-		noPrice: market.noPrice,
-		liquidityUsd: market.liquidityUsd ?? market.volumeUsd,
-		dailyRewardsUsd: market.dailyRewardsUsd,
-		isResolved: market.isResolved
-	});
-	return {
-		...row,
-		expiry: market.expiryLabel
-	};
-};
+const toKalshiRow = (market: KalshiMarket, fetchedAtIso: string): MarketRow =>
+	mapCommonRow(
+		{
+			id: market.id,
+			name: market.title,
+			venue: 'Kalshi',
+			yesPrice: market.yesPrice,
+			noPrice: market.noPrice,
+			volumeUsd: market.volumeUsd,
+			liquidityUsd: market.liquidityUsd,
+			dailyRewardsUsd: market.dailyRewardsUsd,
+			isResolved: market.isResolved,
+			expiryLabel: formatExpiryLabelFromIso(market.closeTimeIso),
+			updatedAtIso: market.updatedTimeIso
+		},
+		fetchedAtIso
+	);
+
+const toLimitlessRow = (market: LimitlessMarket, fetchedAtIso: string): MarketRow =>
+	mapCommonRow(
+		{
+			id: market.slug,
+			name: market.title,
+			venue: 'Limitless',
+			category: categoryFromLimitless(market),
+			yesPrice: market.yesPrice,
+			noPrice: market.noPrice,
+			volumeUsd: market.volumeUsd,
+			liquidityUsd: market.liquidityUsd,
+			dailyRewardsUsd: market.dailyRewardsUsd,
+			isResolved: market.isResolved,
+			expiryLabel: market.expiryLabel,
+			updatedAtIso: market.updatedAtIso
+		},
+		fetchedAtIso
+	);
 
 export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
+	const fetchedAtIso = new Date().toISOString();
 	const dbSnapshot = await loadAlphaDbSnapshot();
 	const polyDbSnapshot = await loadPolymarketDbSnapshot();
 	const apiSnapshot = await loadAlphaApiSnapshot(dbSnapshot.liveMarkets).catch(() => ({
 		markets: [],
 		orderbooks: new Map(),
-		fetchedAtIso: new Date().toISOString(),
+		fetchedAtIso,
 		ok: false,
 		error: 'Failed to load Alpha API snapshot'
 	}));
 	const polySnapshot = await loadPolymarketApiSnapshot(polyDbSnapshot.liveMarkets).catch(() => ({
 		markets: [],
-		fetchedAtIso: new Date().toISOString(),
+		fetchedAtIso,
 		ok: polyDbSnapshot.liveMarkets.length > 0,
 		error: 'Failed to load Polymarket API snapshot'
 	}));
 	const kalshiSnapshot = await loadKalshiApiSnapshot().catch(() => ({
 		markets: [],
-		fetchedAtIso: new Date().toISOString(),
+		fetchedAtIso,
 		ok: false,
 		error: 'Failed to load Kalshi API snapshot'
 	}));
 	const limitlessSnapshot = await loadLimitlessApiSnapshot().catch(() => ({
 		markets: [],
-		fetchedAtIso: new Date().toISOString(),
+		fetchedAtIso,
 		ok: false,
 		error: 'Failed to load Limitless API snapshot'
 	}));
 
-	const alphaMarkets = apiSnapshot.markets.map(toAlphaMarketRow);
-	const polyMarkets = polySnapshot.markets.map(toPolymarketRow);
-	const kalshiMarkets = kalshiSnapshot.markets.map(toKalshiRow);
-	const limitlessMarkets = limitlessSnapshot.markets.map(toLimitlessRow);
+	const alphaMarkets = apiSnapshot.markets.map((market) => toAlphaMarketRow(market, fetchedAtIso));
+	const polyMarkets = polySnapshot.markets.map((market) => toPolymarketRow(market, fetchedAtIso));
+	const kalshiMarkets = kalshiSnapshot.markets.map((market) => toKalshiRow(market, fetchedAtIso));
+	const limitlessMarkets = limitlessSnapshot.markets.map((market) => toLimitlessRow(market, fetchedAtIso));
 	const markets = [...alphaMarkets, ...polyMarkets, ...kalshiMarkets, ...limitlessMarkets].sort(
 		(a, b) => b.volume - a.volume
 	);
@@ -262,7 +286,7 @@ export const buildMarketsResponse = async (): Promise<MarketsApiResponse> => {
 			kalshiApiError: kalshiSnapshot.error,
 			limitlessApiOk: limitlessSnapshot.ok,
 			limitlessApiError: limitlessSnapshot.error,
-			fetchedAtIso: new Date().toISOString()
+			fetchedAtIso
 		}
 	};
 };

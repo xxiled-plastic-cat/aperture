@@ -1,56 +1,5 @@
 export type FeedMode = 'LIVE' | 'PARTIAL' | 'STATIC';
 
-export type Confidence = 'HIGH' | 'MED' | 'LOW';
-
-export type Stat = {
-	label: string;
-	value: string;
-};
-
-export type SignalRow = {
-	signal: string;
-	market: string;
-	venue: string;
-	side: 'YES' | 'NO';
-	price: string;
-	fair: string;
-	edge: string;
-	liquidity: string;
-	confidence: Confidence;
-};
-
-export type ProbabilityDriftView = {
-	market: string;
-	start: string;
-	end: string;
-	sparkline: string;
-	oneHour: string;
-	twentyFourHour: string;
-	spread: string;
-};
-
-export type VenueHealthView = {
-	venue: string;
-	status: string;
-	marketsIndexed: string;
-	lastSync: string;
-	apiMode: string;
-	liquidityScore: string;
-	volumeSignal: string;
-};
-
-export type DashboardViewModel = {
-	dashboardTimestamp: string;
-	navItems: string[];
-	stats: Stat[];
-	signalRows: SignalRow[];
-	marketFeed: string[];
-	venueHealth: VenueHealthView[];
-	probabilityDrift: ProbabilityDriftView;
-	commandPrompts: string[];
-	feedMode: FeedMode;
-};
-
 export type AlphaMarket = {
 	marketAppId: number;
 	id: string;
@@ -58,8 +7,11 @@ export type AlphaMarket = {
 	title: string;
 	yesPrice: number | null;
 	noPrice: number | null;
+	volumeUsd: number | null;
 	liquidityUsd: number | null;
 	dailyRewardsUsd: number | null;
+	endTs: number | null;
+	updatedAtIso: string | null;
 	isLive: boolean | null;
 	isResolved: boolean | null;
 };
@@ -103,6 +55,8 @@ export type AlphaDbLiveMarket = {
 	marketId: string | null;
 	slug: string | null;
 	lastSeenAt: string | null;
+	endTs: number | null;
+	closeTime: string | null;
 };
 
 export type AlphaDbSnapshot = {
@@ -119,6 +73,7 @@ export type PolymarketDbLiveMarket = {
 	marketSlug: string | null;
 	title: string | null;
 	lastSeenAt: string | null;
+	endDate: string | null;
 };
 
 export type PolymarketMarketStatusSummary = {
@@ -134,24 +89,6 @@ export type PolymarketDbSnapshot = {
 	liveMarkets: PolymarketDbLiveMarket[];
 	ok: boolean;
 	error?: string;
-};
-
-export type DashboardApiResponse = DashboardViewModel & {
-	meta: {
-		alphaApiOk: boolean;
-		alphaApiError?: string;
-		alphaDbOk: boolean;
-		alphaDbError?: string;
-		alphaDbLiveMarkets: number;
-		polyDbOk: boolean;
-		polyDbError?: string;
-		polyDbLiveMarkets: number;
-		polyApiOk: boolean;
-		polyApiError?: string;
-		kalshiApiOk: boolean;
-		kalshiApiError?: string;
-		fetchedAtIso: string;
-	};
 };
 
 export type Venue = 'Alpha' | 'Polymarket' | 'Kalshi' | 'Limitless';

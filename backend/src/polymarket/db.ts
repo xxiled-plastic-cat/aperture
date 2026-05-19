@@ -60,7 +60,8 @@ const loadLiveMarkets = async (db: ReturnType<typeof drizzle>): Promise<Polymark
 			marketId: polymarketMarketStatus.marketId,
 			marketSlug: polymarketMarketStatus.marketSlug,
 			title: polymarketMarketStatus.title,
-			lastSeenAt: polymarketMarketStatus.lastSeenAt
+			lastSeenAt: polymarketMarketStatus.lastSeenAt,
+			endDate: polymarketMarketStatus.endDate
 		})
 		.from(polymarketMarketStatus)
 		.where(
@@ -78,7 +79,8 @@ const loadLiveMarkets = async (db: ReturnType<typeof drizzle>): Promise<Polymark
 		marketId: row.marketId ?? null,
 		marketSlug: row.marketSlug ?? null,
 		title: row.title ?? null,
-		lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null
+		lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
+		endDate: row.endDate ? row.endDate.toISOString() : null
 	}));
 };
 
